@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { newId, put, remove } from '../../db/db'
-import { e1rm } from '../../domain/e1rm'
+import { brokenRecords, RECORD_REPS, records } from '../../domain/records'
 import { LIFTS, type Lift, type TableName } from '../../domain/types'
 import { shortDate, todayISO, weekStart } from '../../domain/weeks'
 import { DateField, NumField, Seg, TextField } from '../components/Fields'
@@ -168,13 +168,23 @@ function SetForm({ data, toast }: FormProps) {
     setMemo('')
   }
 
+  const e1rm = data.formula.fn
   const ready = lift !== null && weight !== null && weight > 0 && reps !== null && rpe !== null
   const save = async () => {
     if (!ready) return
-    await put('topSets', { id: id ?? newId(), date, lift, weight, reps, rpe, comp, memo: memo.trim() })
-    toast(id ? 'セットを修正しました' : `${lift} を保存しました`)
+    const next = { id: id ?? newId(), date, lift, weight, reps, rpe, comp, memo: memo.trim() }
+    const broke = brokenRecords(data.topSets, next, e1rm)
+    await put('topSets', next)
+    toast(
+      broke.length > 0
+        ? `${lift} 自己ベスト更新（${broke.map((k) => (k === 'e1rm' ? '推定1RM' : `${reps}回の重量`)).join('・')}）`
+        : id
+          ? 'セットを修正しました'
+          : `${lift} を保存しました`,
+    )
     reset()
   }
+  const best = records(data.topSets, e1rm)
 
   return (
     <>
@@ -208,7 +218,7 @@ function SetForm({ data, toast }: FormProps) {
         </label>
         <TextField label="メモ（任意）" value={memo} onChange={setMemo} placeholder="睡眠不足・疲労など" />
         <div className="row between">
-          <span className="sub">推定1RM</span>
+          <span className="sub">推定1RM（{data.formula.formula.name}式）</span>
           <span className="num">
             <b>{ready ? f1(e1rm(weight, reps, rpe)) : '—'}</b> kg{ready && !comp && '（判定には使わない）'}
           </span>
@@ -221,6 +231,36 @@ function SetForm({ data, toast }: FormProps) {
             修正をやめる
           </button>
         )}
+      </div>
+      <div className="card">
+        <h2>自己ベスト</h2>
+        <div className="scroll-x">
+          <table className="data">
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left' }}>種目</th>
+                <th>e1RM</th>
+                {RECORD_REPS.map((r) => (
+                  <th key={r}>{r}回</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {LIFTS.map((l) => (
+                <tr key={l}>
+                  <td style={{ textAlign: 'left' }}>
+                    <b>{l}</b>
+                  </td>
+                  <td>{f1(best[l].bestE1rm?.value)}</td>
+                  {RECORD_REPS.map((r) => (
+                    <td key={r}>{best[l].byReps[r]?.weight ?? '—'}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="muted">試合基準で挙げたセットのみ。回数の列はその回数での最高重量(kg)。</div>
       </div>
       <Recent
         title="直近のセット"

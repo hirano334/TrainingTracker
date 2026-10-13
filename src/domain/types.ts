@@ -14,9 +14,9 @@ export interface SyncMeta {
 export interface Settings extends SyncMeta {
   id: 'settings'
   heightCm: number
+  /** 基準日・基準体重は、サイクルが1つも無いときの体重補正の基準 */
   baseDate: ISODate
   baseWeight: number
-  baseTotal: number | null
   standard74: number
   standard83: number
   mainMeetDate: ISODate | null
@@ -24,13 +24,15 @@ export interface Settings extends SyncMeta {
   bodyFatLimitPct: number
   allometricExponent: number
   maintenanceKcal: number | null
+  /** 維持カロリーの推定に使う、体重1kgあたりのエネルギー */
+  kcalPerKg: number
 
-  /** 5.4 必要ペースの係数 */
-  requiredPaceFactor: number
+  /** 推定1RMに使う式（組み込みの id か customFormulas の id） */
+  e1rmFormulaId: string
+  customFormulas: Formula[]
+
   /** 5.4 「境界」の下限（必要ペースに掛ける） */
   borderlineFactor: number
-  /** 5.4 10月時点の予測に使う倍率 */
-  projectionMultiplier: number
   /** 5.5 落ち幅の閾値(kg) */
   dropNormalMaxKg: number
   dropGreyMaxKg: number
@@ -42,6 +44,31 @@ export interface Settings extends SyncMeta {
   bulkPaceMinPerMonth: number
   cutPaceMaxPerMonth: number
   e1rmDropAlertPct: number
+}
+
+/** 推定1RMの式。expr は domain/expr.ts の評価器で解釈する */
+export interface Formula {
+  id: string
+  name: string
+  expr: string
+}
+
+/**
+ * 判定の対象にする1サイクル。フェーズ表から割り出さず、利用者が申告する。
+ * 5.4 の係数はサイクルごとに違う（第1サイクルは残り約2.5サイクルを前提にした値）。
+ */
+export interface Cycle extends SyncMeta {
+  id: string
+  name: string
+  baseDate: ISODate
+  baseWeight: number
+  baseTotal: number | null
+  bulkEndDate: ISODate
+  cutEndDate: ISODate
+  /** 5.4 必要ペースの係数 */
+  requiredPaceFactor: number
+  /** 5.4 本命大会時点の予測に使う倍率 */
+  projectionMultiplier: number
 }
 
 export type PhaseKind = 'bulk' | 'cut' | 'checkpoint'
@@ -113,6 +140,7 @@ export interface AppData {
   waistLogs: WaistLog[]
   topSets: TopSet[]
   checkpoints: Checkpoint[]
+  cycles: Cycle[]
 }
 
 export const TABLES = [
@@ -122,6 +150,7 @@ export const TABLES = [
   'waistLogs',
   'topSets',
   'checkpoints',
+  'cycles',
 ] as const
 export type TableName = (typeof TABLES)[number]
 
@@ -133,4 +162,5 @@ export const KEY_OF: { [K in TableName]: keyof AppData[K][number] & string } = {
   waistLogs: 'date',
   topSets: 'id',
   checkpoints: 'date',
+  cycles: 'id',
 }

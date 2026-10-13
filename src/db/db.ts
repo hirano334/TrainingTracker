@@ -1,9 +1,11 @@
 import Dexie, { type EntityTable, type Table } from 'dexie'
-import { DEFAULT_PHASES, DEFAULT_SETTINGS } from '../domain/defaults'
+import { DEFAULT_CYCLE_FACTORS, DEFAULT_CYCLES, DEFAULT_PHASES, DEFAULT_SETTINGS } from '../domain/defaults'
+import { findPhasePairs } from '../domain/phases'
 import {
   TABLES,
   type AppData,
   type Checkpoint,
+  type Cycle,
   type DailyLog,
   type Phase,
   type Settings,
@@ -26,6 +28,7 @@ export class TrackerDB extends Dexie {
   waistLogs!: EntityTable<WaistLog, 'date'>
   topSets!: EntityTable<TopSet, 'id'>
   checkpoints!: EntityTable<Checkpoint, 'date'>
+  cycles!: EntityTable<Cycle, 'id'>
   meta!: EntityTable<Meta, 'key'>
 
   constructor(name = 'cycle-tracker') {
@@ -39,9 +42,37 @@ export class TrackerDB extends Dexie {
       checkpoints: 'date',
       meta: 'key',
     })
+    // 2: 判定の対象を、フェーズ表からの自動割り出しから「申告したサイクル」に変更。
+    // それまで設定にあった基準トータルと係数を、第1サイクルとして引き継ぐ
+    this.version(2)
+      .stores({ cycles: 'id' })
+      .upgrade(async (tx) => {
+        const old = (await tx.table('settings').get('settings')) as
+          | (Partial<Settings> & {
+              baseTotal?: number | null
+              requiredPaceFactor?: number
+              projectionMultiplier?: number
+            })
+          | undefined
+        const phases = (await tx.table('phases').toArray()) as Phase[]
+        const baseDate = old?.baseDate ?? DEFAULT_CYCLES[0].baseDate
+        const pair = findPhasePairs(phases).find((p) => p.bulk.endDate > baseDate)
+        await tx.table('cycles').add({
+          ...DEFAULT_CYCLES[0],
+          updatedAt: old?.updatedAt ?? 0,
+          baseDate,
+          baseWeight: old?.baseWeight ?? DEFAULT_CYCLES[0].baseWeight,
+          baseTotal: old?.baseTotal ?? null,
+          bulkEndDate: pair?.bulk.endDate ?? DEFAULT_CYCLES[0].bulkEndDate,
+          cutEndDate: pair?.cut.endDate ?? DEFAULT_CYCLES[0].cutEndDate,
+          requiredPaceFactor: old?.requiredPaceFactor ?? DEFAULT_CYCLE_FACTORS.requiredPaceFactor,
+          projectionMultiplier: old?.projectionMultiplier ?? DEFAULT_CYCLE_FACTORS.projectionMultiplier,
+        } satisfies Cycle)
+      })
     this.on('populate', (tx) => {
       tx.table('settings').add(DEFAULT_SETTINGS)
       tx.table('phases').bulkAdd(DEFAULT_PHASES)
+      tx.table('cycles').bulkAdd(DEFAULT_CYCLES)
     })
   }
 }
@@ -69,6 +100,17 @@ export async function put<K extends TableName>(
   d: TrackerDB = db,
 ): Promise<void> {
   await table(d, name).put({ ...row, updatedAt: Date.now() } as SyncMeta)
+  notify()
+}
+
+/** まとめて追加・上書き */
+export async function putMany<K extends TableName>(
+  name: K,
+  rows: Omit<AppData[K][number], 'updatedAt' | 'deleted'>[],
+  d: TrackerDB = db,
+): Promise<void> {
+  const updatedAt = Date.now()
+  await table(d, name).bulkPut(rows.map((r) => ({ ...r, updatedAt }) as SyncMeta))
   notify()
 }
 
@@ -114,6 +156,7 @@ export async function resetLocal(d: TrackerDB = db): Promise<void> {
     await d.meta.clear()
     await d.settings.add(DEFAULT_SETTINGS)
     await d.phases.bulkAdd(DEFAULT_PHASES)
+    await d.cycles.bulkAdd(DEFAULT_CYCLES)
   })
 }
 

@@ -1,21 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
-import { dailyLogsCSV, download, downloadBackup, importJSON, topSetsCSV } from '../../db/backup'
-import { newId, put, remove, resetLocal, writeNewer } from '../../db/db'
-import { checkpointTotals } from '../../domain/e1rm'
-import { sampleData } from '../../domain/sample'
+import { useEffect, useState } from 'react'
+import { newId, put, remove } from '../../db/db'
+import { estimateMaintenance } from '../../domain/energy'
 import type { Phase, PhaseKind, Settings as SettingsT } from '../../domain/types'
 import { addDays, todayISO } from '../../domain/weeks'
-import { avgWeightInWindow } from '../../domain/weight'
 import { FILE_NAME } from '../../sync/drive'
 import { disableSync, enableSync, getClientId, syncNow } from '../../sync/syncEngine'
-import { DateField, NumField, TextField } from '../components/Fields'
-import { ago, f1 } from '../format'
-import { useMeta, useSyncState, type Data } from '../useData'
+import { DateField, NumField, Seg, TextField } from '../components/Fields'
+import { ago, f0, signed } from '../format'
+import { useSyncState, type Data } from '../useData'
+import { CyclesCard, FormulaCard } from './SettingsCalc'
+import { Backup } from './SettingsData'
 
-interface Props {
+export interface SettingsProps {
   data: Data
   toast: (msg: string) => void
 }
+type Props = SettingsProps
 
 export function Settings({ data, toast }: Props) {
   return (
@@ -24,10 +24,48 @@ export function Settings({ data, toast }: Props) {
         <h1>設定</h1>
       </div>
       <Params data={data} toast={toast} />
+      <FormulaCard data={data} toast={toast} />
+      <CyclesCard data={data} toast={toast} />
       <Phases data={data} toast={toast} />
       <DriveSync toast={toast} />
       <Backup data={data} toast={toast} />
     </>
+  )
+}
+
+const ESTIMATE_DAYS = [14, 21, 28] as const
+
+/** 摂取カロリーと体重推移から維持カロリーを逆算して見せる */
+function MaintenanceEstimate(props: { data: Data; kcalPerKg: number; onUse: (kcal: number) => void }) {
+  const [days, setDays] = useState<(typeof ESTIMATE_DAYS)[number]>(14)
+  const e = estimateMaintenance(props.data.dailyLogs, todayISO(), days, props.kcalPerKg)
+  return (
+    <div className="stack" style={{ marginTop: 8 }}>
+      <div className="row between">
+        <span className="label" style={{ margin: 0 }}>
+          記録から推定
+        </span>
+        <div style={{ width: 200 }}>
+          <Seg options={ESTIMATE_DAYS} value={days} onChange={setDays} label="推定に使う日数" render={(d) => `${d}日`} className="top" />
+        </div>
+      </div>
+      {e.ok && e.maintenance !== null && e.avgKcal !== null && e.slopePerDay !== null ? (
+        <>
+          <div className="sub num">
+            平均摂取 {f0(e.avgKcal)} kcal（{e.kcalDays}日分）、体重の傾き {signed(e.slopePerDay * 7, 2)} kg/週 →
+            維持 <b style={{ color: 'var(--text)' }}>{f0(e.maintenance)} kcal</b>
+          </div>
+          <button type="button" className="link" onClick={() => props.onUse(Math.round((e.maintenance as number) / 10) * 10)}>
+            {Math.round(e.maintenance / 10) * 10} kcal を使う
+          </button>
+        </>
+      ) : (
+        <div className="muted">{e.reason}</div>
+      )}
+      <div className="muted">
+        平均摂取カロリー − 体重の傾き × {props.kcalPerKg}kcal/kg。増量・減量を始めた直後は水分の増減で体重が動くので、ずれやすい。
+      </div>
+    </div>
   )
 }
 
@@ -42,9 +80,6 @@ function Params({ data, toast }: Props) {
   }
   const dirty = JSON.stringify(d) !== JSON.stringify(data.settings)
 
-  const measuredWeight = avgWeightInWindow(data.dailyLogs, d.baseDate)
-  const measuredTotal = checkpointTotals(data.topSets, d.baseDate).total
-
   const save = async () => {
     await put('settings', d)
     toast('設定を保存しました')
@@ -54,54 +89,27 @@ function Params({ data, toast }: Props) {
     <div className="card stack">
       <h2>パラメータ</h2>
       <div className="grid2">
-        <NumField label="身長 cm" value={d.heightCm} onChange={num('heightCm')} />
-        <DateField label="基準日" value={d.baseDate} onChange={(v) => v && set('baseDate', v)} />
-      </div>
-      <div>
-        <NumField label="基準体重 kg（基準日の実測値で上書き）" value={d.baseWeight} onChange={num('baseWeight')} />
-        {measuredWeight !== null && (
-          <button type="button" className="link" onClick={() => set('baseWeight', Number(measuredWeight.toFixed(1)))}>
-            基準日までの7日平均 {f1(measuredWeight)}kg を使う
-          </button>
-        )}
-      </div>
-      <div>
-        <NumField
-          label="基準トータル kg（基準日に測定）"
-          value={d.baseTotal}
-          onChange={(v) => set('baseTotal', v)}
-          placeholder="未定"
-        />
-        {measuredTotal !== null && (
-          <button type="button" className="link" onClick={() => set('baseTotal', Number(measuredTotal.toFixed(1)))}>
-            基準日までの2週の推定1RM合計 {f1(measuredTotal)}kg を使う
-          </button>
-        )}
-        <div className="muted">
-          2月末の値は推定1RM（RPEからの計算値）なので、ここも同じ方法の値にすると比較が揃います。
-          実測MAXの合計を入れると、推定1RMのほうが高く出やすいぶん伸びが大きく見えます。
-        </div>
-      </div>
-      <div className="grid2">
         <NumField label="74kg級 標準 kg" value={d.standard74} onChange={num('standard74')} />
         <NumField label="83kg級 標準 kg" value={d.standard83} onChange={num('standard83')} />
         <DateField label="本命大会（仮）" value={d.mainMeetDate} onChange={(v) => set('mainMeetDate', v)} />
         <DateField label="春の大会" value={d.springMeetDate} onChange={(v) => set('springMeetDate', v)} />
+        <NumField label="身長 cm" value={d.heightCm} onChange={num('heightCm')} />
         <NumField label="体脂肪率の上限 %" value={d.bodyFatLimitPct} onChange={num('bodyFatLimitPct')} />
+      </div>
+      <div>
         <NumField
           label="維持カロリー kcal"
           value={d.maintenanceKcal}
           onChange={(v) => set('maintenanceKcal', v)}
           placeholder="未定"
         />
+        <MaintenanceEstimate data={data} kcalPerKg={d.kcalPerKg} onUse={(kcal) => set('maintenanceKcal', kcal)} />
       </div>
       <details>
         <summary>計算の係数・閾値</summary>
         <div className="grid2" style={{ marginTop: 8 }}>
           <NumField label="体重補正の指数" value={Number(d.allometricExponent.toFixed(4))} onChange={num('allometricExponent')} />
-          <NumField label="必要ペースの係数" value={d.requiredPaceFactor} onChange={num('requiredPaceFactor')} />
           <NumField label="「境界」の下限（×必要ペース）" value={d.borderlineFactor} onChange={num('borderlineFactor')} />
-          <NumField label="10月予測の倍率" value={d.projectionMultiplier} onChange={num('projectionMultiplier')} />
           <NumField label="落ち幅：正常の上限 kg" value={d.dropNormalMaxKg} onChange={num('dropNormalMaxKg')} />
           <NumField label="落ち幅：グレーの上限 kg" value={d.dropGreyMaxKg} onChange={num('dropGreyMaxKg')} />
           <NumField label="83kg級ルートの月数" value={d.route83Months} onChange={num('route83Months')} />
@@ -122,6 +130,10 @@ function Params({ data, toast }: Props) {
           <NumField label="増量ペース下限 kg/月" value={d.bulkPaceMinPerMonth} onChange={num('bulkPaceMinPerMonth')} />
           <NumField label="減量ペース上限 kg/月" value={d.cutPaceMaxPerMonth} onChange={num('cutPaceMaxPerMonth')} />
           <NumField label="e1RM低下の警告 %" value={d.e1rmDropAlertPct} onChange={num('e1rmDropAlertPct')} />
+          <NumField label="体重1kgあたり kcal" value={d.kcalPerKg} onChange={num('kcalPerKg')} />
+        </div>
+        <div className="muted" style={{ marginTop: 6 }}>
+          必要ペースの係数と予測の倍率は、サイクルごとに設定します。
         </div>
       </details>
       <button type="button" className="btn primary" onClick={save} disabled={!dirty}>
@@ -309,88 +321,6 @@ function DriveSync({ toast }: { toast: (m: string) => void }) {
           </button>
         </>
       )}
-    </div>
-  )
-}
-
-function Backup({ data, toast }: Props) {
-  const file = useRef<HTMLInputElement>(null)
-  const lastBackupAt = useMeta<number>('lastBackupAt')
-  return (
-    <div className="card stack">
-      <h2>バックアップ</h2>
-      <div className="sub">最終バックアップ：{ago(lastBackupAt)}</div>
-      <div className="grid2">
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            await downloadBackup()
-            toast('バックアップを書き出しました')
-          }}
-        >
-          書き出し（JSON）
-        </button>
-        <button type="button" className="btn" onClick={() => file.current?.click()}>
-          読み込み
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => download(`weight-${todayISO()}.csv`, dailyLogsCSV(data.dailyLogs), 'text/csv')}
-        >
-          体重 CSV
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => download(`topsets-${todayISO()}.csv`, topSetsCSV(data.topSets), 'text/csv')}
-        >
-          トレ CSV
-        </button>
-      </div>
-      <input
-        ref={file}
-        type="file"
-        accept="application/json,.json"
-        hidden
-        onChange={async (e) => {
-          const f = e.target.files?.[0]
-          e.target.value = ''
-          if (!f) return
-          try {
-            await importJSON(await f.text())
-            toast('バックアップを読み込みました')
-          } catch (err) {
-            alert(`読み込めませんでした：${(err as Error).message}`)
-          }
-        }}
-      />
-      <div className="muted">読み込みは、同じ記録が両方にある場合に新しい方を残します。</div>
-      {import.meta.env.DEV && (
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            await writeNewer(sampleData())
-            toast('サンプルデータを入れました')
-          }}
-        >
-          （開発用）サンプルデータを入れる
-        </button>
-      )}
-      <button
-        type="button"
-        className="btn danger"
-        onClick={async () => {
-          if (!confirm('この端末の記録をすべて消して初期状態に戻します。Drive 上のファイルは消えません。よろしいですか？')) return
-          await disableSync()
-          await resetLocal()
-          toast('この端末の記録を消しました')
-        }}
-      >
-        この端末の記録を全消去
-      </button>
     </div>
   )
 }

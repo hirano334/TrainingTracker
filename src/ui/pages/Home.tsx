@@ -46,7 +46,7 @@ export function Home({ data }: { data: Data }) {
     const phase = phaseAt(phases, today)
     const week = weeklyWeights(dailyLogs).get(weekStart(today)) ?? null
     const target = week ? weekTarget(week, phases) : null
-    const rows = weeklySeries(s, phases, dailyLogs, topSets, waistLogs, addDays(today, -21), today)
+    const rows = weeklySeries(s, data.refWeight, phases, dailyLogs, topSets, waistLogs, addDays(today, -21), today)
     return {
       phase,
       week,
@@ -103,6 +103,20 @@ export function Home({ data }: { data: Data }) {
         )}
       </div>
 
+      {data.formula.fallbackReason && (
+        <div className="card" role="alert">
+          <div className="alert">
+            <span className="mark" aria-hidden>
+              !
+            </span>
+            <div>
+              <b>推定1RMの式を Epley に戻しています</b>
+              <div className="sub">{data.formula.fallbackReason}（設定で式を確認してください）</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {v.alerts.length > 0 && (
         <div className="card" role="alert">
           {v.alerts.map((a) => (
@@ -150,7 +164,7 @@ export function Home({ data }: { data: Data }) {
 
       <div className="card">
         <div className="sub">
-          直近のトータルe1RM{strength ? `（${shortDate(strength.weekStart)}の週）` : ''}
+          直近のトータルe1RM{strength ? `（${shortDate(strength.weekStart)}の週）` : ''}・{data.formula.formula.name}式
         </div>
         <div className="stats" style={{ marginTop: 6 }}>
           <div className="stat">
@@ -165,7 +179,7 @@ export function Home({ data }: { data: Data }) {
               {f1(strength?.adjTotal)}
               <small>kg</small>
             </div>
-            <div className="muted">体重補正後（{f1(s.baseWeight)}kg換算）</div>
+            <div className="muted">体重補正後（{f1(data.refWeight)}kg換算）</div>
           </div>
         </div>
         {!strength && <div className="muted">SQ・BP・DL が直近2週以内に揃うと表示されます。</div>}

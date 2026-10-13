@@ -39,7 +39,7 @@ export async function importJSON(text: string, d: TrackerDB = db): Promise<void>
   await writeNewer(parsePayload(text), d)
 }
 
-function csv(header: string[], rows: (string | number | null)[][]): string {
+export function csv(header: string[], rows: (string | number | null)[][]): string {
   const cell = (v: string | number | null) => {
     const s = v === null ? '' : String(v)
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s

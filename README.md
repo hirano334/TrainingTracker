@@ -27,6 +27,17 @@ npm run build    # dist/ に出力
 バックアップを書き出して読み込むか、Google Drive 同期を使う
 （準備は [docs/google-drive-setup.md](docs/google-drive-setup.md)）。
 
+## 計算まわり
+
+- **推定1RMの式**：設定で Epley / Brzycki / Lombardi / O'Conner / Wathan から選べる。独自の式も
+  `w * (1 + r / 30)` のように書いて追加できる（変数 `w` `reps` `rpe` `rir` `r`、関数 `exp ln log10 sqrt abs pow min max`）。
+  式は `src/domain/expr.ts` の評価器が数式としてだけ解釈し、プログラムとしては実行しない。
+- **サイクル**：判定の対象（基準日・増量終了日・減量終了日・基準トータル）は設定の「サイクル」で申告する。
+  フェーズ表は目標体重ラインとアラート用で、判定の期間は自動では変わらない。
+- **書き出し**：記録（入力値）は JSON / CSV、結果（計算値）は JSON と週次の表 CSV。結果の JSON には使った式と設定が入る。
+- **CSV の取り込み**：体重は `date, weight, bodyfat, kcal, protein`、トップセットは
+  `date, lift, weight, reps, rpe, comp, memo`。このアプリが書き出した CSV もそのまま読める。
+
 ## 構成
 
 | 場所 | 内容 |

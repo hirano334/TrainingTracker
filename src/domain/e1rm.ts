@@ -1,3 +1,4 @@
+import type { E1rmFn } from './formulas'
 import { LIFTS, type ISODate, type Lift, type TopSet } from './types'
 import { addDays, weekStart } from './weeks'
 
@@ -7,15 +8,7 @@ export interface Totals extends LiftValues {
   total: number | null
 }
 
-/** 5.2 e1RM = 重量 × (1 + (回数 + RIR) / 30)、RIR = 10 − RPE */
-export function e1rm(weight: number, reps: number, rpe: number): number {
-  const rir = 10 - rpe
-  return weight * (1 + (reps + rir) / 30)
-}
-
-export function setE1rm(s: TopSet): number {
-  return e1rm(s.weight, s.reps, s.rpe)
-}
+// 5.2 推定1RM。式そのものは formulas.ts にあり、設定で選んだものを fn として受け取る
 
 /** 判定用の計算に使えるセット（試合基準で挙げたもの）だけを残す */
 export function countable(sets: TopSet[]): TopSet[] {
@@ -32,12 +25,12 @@ function sumLifts(v: LiftValues): number | null {
 }
 
 /** 5.2 週のe1RM：種目ごとに、その週の最大値 */
-export function weeklyE1rm(sets: TopSet[]): Map<ISODate, LiftValues> {
+export function weeklyE1rm(sets: TopSet[], fn: E1rmFn): Map<ISODate, LiftValues> {
   const out = new Map<ISODate, LiftValues>()
   for (const s of countable(sets)) {
     const w = weekStart(s.date)
     const row = out.get(w) ?? emptyLifts()
-    row[s.lift] = Math.max(row[s.lift] ?? 0, setE1rm(s))
+    row[s.lift] = Math.max(row[s.lift] ?? 0, fn(s.weight, s.reps, s.rpe))
     out.set(w, row)
   }
   return out
@@ -60,11 +53,11 @@ export function weeklyTotal(weekly: Map<ISODate, LiftValues>, week: ISODate): To
   return { ...v, total: sumLifts(v) }
 }
 
-function maxInRange(sets: TopSet[], lift: Lift, from: ISODate, to: ISODate): number | null {
+function maxInRange(sets: TopSet[], fn: E1rmFn, lift: Lift, from: ISODate, to: ISODate): number | null {
   let best: number | null = null
   for (const s of sets) {
     if (s.lift !== lift || s.date < from || s.date > to) continue
-    best = Math.max(best ?? 0, setE1rm(s))
+    best = Math.max(best ?? 0, fn(s.weight, s.reps, s.rpe))
   }
   return best
 }
@@ -74,13 +67,13 @@ function maxInRange(sets: TopSet[], lift: Lift, from: ISODate, to: ISODate): num
  * 基準日が月曜など週の途中でも使えるよう、date を最終日とする7日間×2で数える
  * （date が日曜なら暦の週と一致する）。片方の週にしか記録がなければその値を使う。
  */
-export function checkpointTotals(sets: TopSet[], date: ISODate): Totals {
+export function checkpointTotals(sets: TopSet[], date: ISODate, fn: E1rmFn): Totals {
   const ok = countable(sets)
   const v = emptyLifts()
   for (const lift of LIFTS) {
     const xs = [
-      maxInRange(ok, lift, addDays(date, -6), date),
-      maxInRange(ok, lift, addDays(date, -13), addDays(date, -7)),
+      maxInRange(ok, fn, lift, addDays(date, -6), date),
+      maxInRange(ok, fn, lift, addDays(date, -13), addDays(date, -7)),
     ].filter((x): x is number => x !== null)
     v[lift] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null
   }

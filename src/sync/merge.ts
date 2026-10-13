@@ -1,7 +1,7 @@
 import { KEY_OF, TABLES, type AppData, type SyncMeta, type TableName } from '../domain/types'
 
 export function emptyData(): AppData {
-  return { settings: [], phases: [], dailyLogs: [], waistLogs: [], topSets: [], checkpoints: [] }
+  return { settings: [], phases: [], dailyLogs: [], waistLogs: [], topSets: [], checkpoints: [], cycles: [] }
 }
 
 export interface MergeResult {

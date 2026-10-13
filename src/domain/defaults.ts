@@ -1,4 +1,4 @@
-import type { Phase, Settings } from './types'
+import type { Cycle, Phase, Settings } from './types'
 
 // 初期値は updatedAt: 0 にする。別の端末やバックアップに実データがあれば必ずそちらが勝つ
 
@@ -9,7 +9,6 @@ export const DEFAULT_SETTINGS: Settings = {
   heightCm: 178,
   baseDate: '2026-11-30',
   baseWeight: 72.5,
-  baseTotal: null,
   standard74: 540,
   standard83: 570,
   mainMeetDate: '2027-10-01',
@@ -17,9 +16,10 @@ export const DEFAULT_SETTINGS: Settings = {
   bodyFatLimitPct: 17,
   allometricExponent: 2 / 3,
   maintenanceKcal: null,
-  requiredPaceFactor: 0.4,
+  kcalPerKg: 7700,
+  e1rmFormulaId: 'epley',
+  customFormulas: [],
   borderlineFactor: 0.5,
-  projectionMultiplier: 2.5,
   dropNormalMaxKg: 10,
   dropGreyMaxKg: 15,
   route83TargetsKg: [81, 82],
@@ -92,5 +92,23 @@ export const DEFAULT_PHASES: Phase[] = [
     paceNote: '',
     kcalOffsetMin: null,
     kcalOffsetMax: null,
+  },
+]
+
+/** 5.4 の係数の初期値。10月までの残り約2.5サイクルで伸びが 1 : 0.8 : 0.7 と鈍る仮定 */
+export const DEFAULT_CYCLE_FACTORS = { requiredPaceFactor: 0.4, projectionMultiplier: 2.5 }
+
+/** 要件定義 1章の第1サイクル */
+export const DEFAULT_CYCLES: Cycle[] = [
+  {
+    id: 'cycle-1',
+    updatedAt: 0,
+    name: '第1サイクル',
+    baseDate: '2026-11-30',
+    baseWeight: 72.5,
+    baseTotal: null,
+    bulkEndDate: '2027-01-31',
+    cutEndDate: '2027-02-28',
+    ...DEFAULT_CYCLE_FACTORS,
   },
 ]

@@ -1,4 +1,5 @@
 import { checkpointTotals, weeklyE1rm, weeklyTotal } from './e1rm'
+import { resolveFormula } from './formulas'
 import { phaseAt } from './phases'
 import type { DailyLog, ISODate, Phase, Settings, TopSet } from './types'
 import { addDays, weekStart } from './weeks'
@@ -25,10 +26,14 @@ export function e1rmDroppedTwoWeeks(
   asOf: ISODate,
 ): { ref: number; weeks: [number, number] } | null {
   if (cut.startDate === null) return null
-  const ref = checkpointTotals(sets, addDays(cut.startDate, -1)).total
+  const fn = resolveFormula(s).fn
+  const ref = checkpointTotals(sets, addDays(cut.startDate, -1), fn).total
   if (ref === null) return null
 
-  const weekly = weeklyE1rm(sets.filter((x) => x.date <= asOf))
+  const weekly = weeklyE1rm(
+    sets.filter((x) => x.date <= asOf),
+    fn,
+  )
   const first = weekStart(cut.startDate)
   // 減量期のうち、記録のある最新の週とその前の週
   let w = weekStart(asOf)

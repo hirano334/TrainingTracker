@@ -517,3 +517,76 @@ table.data th {
 .recharts-surface {
   outline: none;
 }
+
+/* 判定レポートの印刷・PDF */
+@media print {
+  :root {
+    color-scheme: light;
+    --page: #ffffff;
+    --surface: #ffffff;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.18);
+    --fill: rgba(11, 11, 11, 0.05);
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+  }
+  @page {
+    margin: 12mm;
+  }
+  body {
+    font-size: 12px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .tabs,
+  .toast,
+  .no-print {
+    display: none !important;
+  }
+  .app {
+    max-width: none;
+    padding: 0;
+  }
+  .card {
+    break-inside: avoid;
+    margin-bottom: 8px;
+    padding: 10px 12px;
+  }
+}
+
+/* レポートは紙の幅を使い切るよう2列に並べる。見出しは2列ぶん使う。
+   印刷の直前にグラフを描き直す時間が要るので、「印刷」ボタンは先に画面を
+   この配置（html.printing）に切り替えてから印刷を呼ぶ。 */
+html.printing .app {
+  /* A4 の印字幅に合わせる。画面が狭くてもこの幅で描いておく */
+  width: 700px;
+  max-width: none;
+}
+html.printing .report {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 30px;
+  align-items: start;
+}
+html.printing .report > .page-head {
+  grid-column: 1 / -1;
+}
+@media print {
+  .report {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0 30px;
+    align-items: start;
+  }
+  .report > .page-head {
+    grid-column: 1 / -1;
+  }
+  /* ブラウザのメニューから直接印刷した場合でも、グラフが枠の外にはみ出さないようにする */
+  .report .recharts-responsive-container {
+    overflow: hidden;
+  }
+}

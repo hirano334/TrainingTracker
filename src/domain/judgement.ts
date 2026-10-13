@@ -1,7 +1,7 @@
 import { adjustedTotal } from './adjust'
 import { checkpointTotals, type Totals } from './e1rm'
-import type { Cycle } from './phases'
-import type { DailyLog, ISODate, Settings, TopSet } from './types'
+import { resolveFormula } from './formulas'
+import type { Cycle, DailyLog, ISODate, Settings, TopSet } from './types'
 import { avgWeightInWindow } from './weight'
 
 export type PaceVerdict = 'inRange' | 'borderline' | 'hard'
@@ -9,8 +9,8 @@ export type DropVerdict = 'normal' | 'grey' | 'large'
 export type ClassVerdict = 'either' | 'lean83' | 'recommend83' | 'recommend74'
 
 /** 5.4 必要ペース = (74kg級標準 − 基準トータル) × 係数 */
-export function requiredGain(s: Settings, baseTotal: number): number {
-  return (s.standard74 - baseTotal) * s.requiredPaceFactor
+export function requiredGain(standard74: number, baseTotal: number, factor: number): number {
+  return (standard74 - baseTotal) * factor
 }
 
 /** 5.4 判定① */
@@ -41,20 +41,18 @@ export function route83Pace(targetKg: number, weekAvgWeight: number, months: num
 }
 
 export interface Judgement {
-  /** 減量期の終了日以降なら確定、それより前は途中経過 */
+  cycle: Cycle
+  /** 減量終了日以降なら確定、それより前は途中経過 */
   final: boolean
-  /** 計算に使った日（確定なら減量期の終了日） */
+  /** 計算に使った日（確定なら減量終了日） */
   evalDate: ISODate
-  bulkEndDate: ISODate
-  cutEndDate: ISODate
   now: Totals
   weekAvgWeight: number | null
   adjTotal: number | null
-  baseTotal: number | null
   gain: number | null
   required: number | null
   pace: PaceVerdict | null
-  /** 5.4 10月時点の予測トータル = 基準トータル + 伸び × 倍率 */
+  /** 5.4 本命大会時点の予測トータル = 基準トータル + 伸び × 倍率 */
   projection: number | null
   atBulkEnd: Totals | null
   drop: number | null
@@ -63,34 +61,28 @@ export interface Judgement {
   route83: { targetKg: number; perMonth: number }[]
 }
 
-export function judge(
-  s: Settings,
-  cycle: Cycle,
-  logs: DailyLog[],
-  sets: TopSet[],
-  asOf: ISODate,
-): Judgement {
-  const cutEnd = cycle.cut.endDate
-  const bulkEnd = cycle.bulk.endDate
-  const final = asOf >= cutEnd
-  const evalDate = final ? cutEnd : asOf
+/** 申告されたサイクル1件を判定する */
+export function judge(s: Settings, cycle: Cycle, logs: DailyLog[], sets: TopSet[], asOf: ISODate): Judgement {
+  const fn = resolveFormula(s).fn
+  const final = asOf >= cycle.cutEndDate
+  const evalDate = final ? cycle.cutEndDate : asOf
 
-  const now = checkpointTotals(sets, evalDate)
+  const now = checkpointTotals(sets, evalDate, fn)
   const weekAvgWeight = avgWeightInWindow(logs, evalDate)
   const adjTotal =
     now.total !== null && weekAvgWeight !== null
-      ? adjustedTotal(now.total, s.baseWeight, weekAvgWeight, s.allometricExponent)
+      ? adjustedTotal(now.total, cycle.baseWeight, weekAvgWeight, s.allometricExponent)
       : null
 
-  const gain = adjTotal !== null && s.baseTotal !== null ? adjTotal - s.baseTotal : null
-  const required = s.baseTotal !== null ? requiredGain(s, s.baseTotal) : null
+  const base = cycle.baseTotal
+  const gain = adjTotal !== null && base !== null ? adjTotal - base : null
+  const required = base !== null ? requiredGain(s.standard74, base, cycle.requiredPaceFactor) : null
   const pace = gain !== null && required !== null ? judgePace(gain, required, s) : null
-  const projection =
-    gain !== null && s.baseTotal !== null ? s.baseTotal + gain * s.projectionMultiplier : null
+  const projection = gain !== null && base !== null ? base + gain * cycle.projectionMultiplier : null
 
   // 落ち幅は減量期に入ってからでないと意味がない。体重補正はかけない
-  const inCut = evalDate > bulkEnd
-  const atBulkEnd = inCut ? checkpointTotals(sets, bulkEnd) : null
+  const inCut = evalDate > cycle.bulkEndDate
+  const atBulkEnd = inCut ? checkpointTotals(sets, cycle.bulkEndDate, fn) : null
   const drop =
     atBulkEnd && atBulkEnd.total !== null && now.total !== null ? atBulkEnd.total - now.total : null
   const dropVerdict = drop !== null ? judgeDrop(drop, s) : null
@@ -106,14 +98,12 @@ export function judge(
       : []
 
   return {
+    cycle,
     final,
     evalDate,
-    bulkEndDate: bulkEnd,
-    cutEndDate: cutEnd,
     now,
     weekAvgWeight,
     adjTotal,
-    baseTotal: s.baseTotal,
     gain,
     required,
     pace,
@@ -124,4 +114,14 @@ export function judge(
     classVerdict,
     route83,
   }
+}
+
+/** 基準日の古い順 */
+export function sortCycles(cycles: Cycle[]): Cycle[] {
+  return cycles.filter((c) => !c.deleted).sort((a, b) => a.baseDate.localeCompare(b.baseDate))
+}
+
+/** グラフの体重補正に使う基準体重：最初のサイクルの基準体重 */
+export function referenceWeight(s: Settings, cycles: Cycle[]): number {
+  return sortCycles(cycles)[0]?.baseWeight ?? s.baseWeight
 }

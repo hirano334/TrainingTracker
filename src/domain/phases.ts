@@ -51,15 +51,18 @@ export function targetWeightAt(phases: Phase[], date: ISODate): number | null {
   return p ? targetWeightOn(p, date) : null
 }
 
-export interface Cycle {
+export interface PhasePair {
   bulk: Phase
   cut: Phase
 }
 
-/** 基準日より後の「増量 → 直後の減量」の組を古い順に返す */
-export function findCycles(phases: Phase[], baseDate: ISODate): Cycle[] {
-  const seq = activePhases(phases).filter((p) => p.kind !== 'checkpoint' && p.endDate > baseDate)
-  const out: Cycle[] = []
+/**
+ * 「増量 → 直後の減量」の組を古い順に返す。
+ * サイクルを申告するときに、日付の候補を埋めるのに使う。
+ */
+export function findPhasePairs(phases: Phase[]): PhasePair[] {
+  const seq = activePhases(phases).filter((p) => p.kind !== 'checkpoint')
+  const out: PhasePair[] = []
   for (let i = 0; i + 1 < seq.length; i++) {
     if (seq[i].kind === 'bulk' && seq[i + 1].kind === 'cut') out.push({ bulk: seq[i], cut: seq[i + 1] })
   }

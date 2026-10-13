@@ -1,7 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { Totals } from '../../domain/e1rm'
-import { judge, type ClassVerdict, type DropVerdict, type PaceVerdict } from '../../domain/judgement'
-import { findCycles } from '../../domain/phases'
+import {
+  judge,
+  type ClassVerdict,
+  type DropVerdict,
+  type Judgement as J,
+  type PaceVerdict,
+} from '../../domain/judgement'
+import type { Checkpoint } from '../../domain/types'
 import { addDays, shortDate, todayISO } from '../../domain/weeks'
 import { f1, signed } from '../format'
 import type { Data } from '../useData'
@@ -13,16 +19,22 @@ const PACE: Record<PaceVerdict, { label: string; tone: Tone }> = {
   borderline: { label: '境界', tone: 'warning' },
   hard: { label: '厳しい', tone: 'critical' },
 }
-const DROP: Record<DropVerdict, { label: string; tone: Tone }> = {
-  normal: { label: '正常（体重減の分だけ落ちた）', tone: 'good' },
-  grey: { label: 'グレー', tone: 'warning' },
-  large: { label: '減量で重量を失いやすい → 83kg級が有利', tone: 'serious' },
+const DROP: Record<DropVerdict, { label: string; short: string; tone: Tone }> = {
+  normal: { label: '正常（体重減の分だけ落ちた）', short: '正常', tone: 'good' },
+  grey: { label: 'グレー', short: 'グレー', tone: 'warning' },
+  large: { label: '減量で重量を失いやすい → 83kg級が有利', short: '落ちやすい', tone: 'serious' },
 }
-const CLASS: Record<ClassVerdict, string> = {
+export const CLASS_LABEL: Record<ClassVerdict, string> = {
   either: 'どちらも可。見た目の好みで選ぶ（74級は体脂肪11〜12%を維持、83級は大会時に約17%）',
   recommend83: '83kg級を推奨',
   lean83: '83kg級寄り。どちらも可',
   recommend74: '74kg級を推奨（追加の増量コストがかからない）',
+}
+const CLASS_SHORT: Record<ClassVerdict, string> = {
+  either: 'どちらも可',
+  recommend83: '83kg級',
+  lean83: '83kg級寄り',
+  recommend74: '74kg級',
 }
 
 function Badge({ v }: { v: { label: string; tone: Tone } | null }) {
@@ -35,32 +47,18 @@ function Badge({ v }: { v: { label: string; tone: Tone } | null }) {
   )
 }
 
-const lifts = (t: Totals | null) =>
-  t ? `SQ ${f1(t.SQ)} / BP ${f1(t.BP)} / DL ${f1(t.DL)}` : '—'
+const lifts = (t: Totals | null) => (t ? `SQ ${f1(t.SQ)} / BP ${f1(t.BP)} / DL ${f1(t.DL)}` : '—')
 
-export function Judgement({ data }: { data: Data }) {
-  const today = todayISO()
+export const statusLabel = (j: J) =>
+  j.final ? `確定（${shortDate(j.cycle.cutEndDate)}）` : `暫定（${shortDate(j.evalDate)}時点）`
+
+/** 1サイクルぶんの判定の表示。判定画面とレポートで共用 */
+export function JudgementCards({ j, data }: { j: J; data: Data }) {
   const s = data.settings
-  const cycle = useMemo(() => findCycles(data.phases, s.baseDate)[0] ?? null, [data.phases, s.baseDate])
-  const j = useMemo(
-    () => (cycle ? judge(s, cycle, data.dailyLogs, data.topSets, today) : null),
-    [s, cycle, data.dailyLogs, data.topSets, today],
-  )
-
-  if (!cycle || !j) {
-    return (
-      <>
-        <div className="page-head">
-          <h1>判定</h1>
-        </div>
-        <div className="card sub">基準日より後に「増量 → 減量」のフェーズがありません。設定のフェーズ表を確認してください。</div>
-      </>
-    )
-  }
-
+  const c = j.cycle
   // 判定日の前後1週間の測定記録を、実測MAXとして並べる
-  const measured = data.checkpoints
-    .filter((c) => c.date >= addDays(j.cutEndDate, -7) && c.date <= addDays(j.cutEndDate, 7))
+  const measured: Checkpoint | undefined = data.checkpoints
+    .filter((x) => x.date >= addDays(c.cutEndDate, -7) && x.date <= addDays(c.cutEndDate, 7))
     .at(-1)
   const measuredTotal =
     measured && measured.maxSQ !== null && measured.maxBP !== null && measured.maxDL !== null
@@ -69,25 +67,12 @@ export function Judgement({ data }: { data: Data }) {
 
   return (
     <>
-      <div className="page-head">
-        <h1>判定</h1>
-        <span className="badge">{j.final ? `確定（${shortDate(j.cutEndDate)}）` : `暫定（${shortDate(j.evalDate)}時点）`}</span>
-      </div>
-
-      {!j.final && (
-        <div className="card sub">
-          判定は {cycle.cut.name} の終了日（{j.cutEndDate}）に確定します。それまでは今日までの記録で計算した途中経過です。
-        </div>
-      )}
-
       <div className="card">
         <h2>階級の判定</h2>
-        <div style={{ fontSize: 18, fontWeight: 600 }}>
-          {j.classVerdict ? CLASS[j.classVerdict] : '未判定'}
-        </div>
+        <div style={{ fontSize: 18, fontWeight: 600 }}>{j.classVerdict ? CLASS_LABEL[j.classVerdict] : '未判定'}</div>
         {!j.classVerdict && (
           <div className="sub" style={{ marginTop: 6 }}>
-            {j.baseTotal === null && '・基準トータルが未入力（設定）'}
+            {c.baseTotal === null && <div>・基準トータルが未入力（設定のサイクル）</div>}
             {j.now.total === null && <div>・直近2週に SQ・BP・DL の試合基準のセットが必要</div>}
             {j.weekAvgWeight === null && <div>・直近7日の体重が必要</div>}
             {j.drop === null && j.now.total !== null && <div>・落ち幅は減量期に入ってから計算</div>}
@@ -103,8 +88,8 @@ export function Judgement({ data }: { data: Data }) {
         <table className="kv" style={{ marginTop: 8 }}>
           <tbody>
             <tr>
-              <th>基準トータル（{shortDate(s.baseDate)}）</th>
-              <td>{f1(j.baseTotal)} kg</td>
+              <th>基準トータル（{shortDate(c.baseDate)}）</th>
+              <td>{f1(c.baseTotal)} kg</td>
             </tr>
             <tr>
               <th>
@@ -118,7 +103,7 @@ export function Judgement({ data }: { data: Data }) {
               <td>{f1(j.weekAvgWeight)} kg</td>
             </tr>
             <tr>
-              <th>補正トータル（{f1(s.baseWeight)}kg換算）</th>
+              <th>補正トータル（{f1(c.baseWeight)}kg換算）</th>
               <td>{f1(j.adjTotal)} kg</td>
             </tr>
             <tr>
@@ -131,16 +116,16 @@ export function Judgement({ data }: { data: Data }) {
               <th>
                 必要ペース
                 <div className="muted">
-                  ({s.standard74} − 基準トータル) × {s.requiredPaceFactor}
+                  ({s.standard74} − 基準トータル) × {c.requiredPaceFactor}
                 </div>
               </th>
               <td>{signed(j.required)} kg</td>
             </tr>
             <tr>
               <th>
-                10月時点の予測トータル
+                本命大会時点の予測トータル
                 <div className="muted">
-                  基準 + 伸び × {s.projectionMultiplier}／標準 74kg級 {s.standard74}・83kg級 {s.standard83}
+                  基準 + 伸び × {c.projectionMultiplier}／標準 74kg級 {s.standard74}・83kg級 {s.standard83}
                 </div>
               </th>
               <td>{f1(j.projection)} kg</td>
@@ -171,7 +156,7 @@ export function Judgement({ data }: { data: Data }) {
           <tbody>
             <tr>
               <th>
-                トータルe1RM（{shortDate(j.bulkEndDate)}）
+                トータルe1RM（{shortDate(c.bulkEndDate)}）
                 <div className="muted">{lifts(j.atBulkEnd)}</div>
               </th>
               <td>{f1(j.atBulkEnd?.total)} kg</td>
@@ -215,6 +200,108 @@ export function Judgement({ data }: { data: Data }) {
           (着地目標 − {shortDate(j.evalDate)}時点の週平均体重) ÷ {s.route83Months}ヶ月
         </div>
       </div>
+    </>
+  )
+}
+
+/** サイクル同士の比較 */
+function Compare({ all }: { all: J[] }) {
+  return (
+    <div className="card">
+      <h2>サイクルの比較</h2>
+      <div className="scroll-x">
+        <table className="data">
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left' }}>サイクル</th>
+              <th>伸び</th>
+              <th>必要</th>
+              <th>判定①</th>
+              <th>落ち幅</th>
+              <th>判定②</th>
+              <th>階級</th>
+            </tr>
+          </thead>
+          <tbody>
+            {all.map((j) => (
+              <tr key={j.cycle.id}>
+                <td style={{ textAlign: 'left' }}>
+                  {j.cycle.name}
+                  {!j.final && '（暫定）'}
+                </td>
+                <td>{signed(j.gain)}</td>
+                <td>{signed(j.required)}</td>
+                <td>{j.pace ? PACE[j.pace].label : '—'}</td>
+                <td>{f1(j.drop)}</td>
+                <td>{j.dropVerdict ? DROP[j.dropVerdict].short : '—'}</td>
+                <td>{j.classVerdict ? CLASS_SHORT[j.classVerdict] : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+export function Judgement({ data, openReport }: { data: Data; openReport: (cycleId: string) => void }) {
+  const today = todayISO()
+  const all = useMemo(
+    () => data.cycles.map((c) => judge(data.settings, c, data.dailyLogs, data.topSets, today)),
+    [data, today],
+  )
+  // 最初は、今日を含むサイクル（無ければ最後に始まったもの）
+  const [picked, setPicked] = useState<string | null>(null)
+  const current =
+    all.find((j) => j.cycle.id === picked) ??
+    all.find((j) => j.cycle.baseDate <= today && today <= j.cycle.cutEndDate) ??
+    all.filter((j) => j.cycle.baseDate <= today).at(-1) ??
+    all[0]
+
+  if (!current) {
+    return (
+      <>
+        <div className="page-head">
+          <h1>判定</h1>
+        </div>
+        <div className="card sub">判定するサイクルがありません。設定の「サイクル」で、基準日・増量終了日・減量終了日を申告してください。</div>
+      </>
+    )
+  }
+
+  const c = current.cycle
+  return (
+    <>
+      <div className="page-head">
+        <h1>判定</h1>
+        <span className="badge">{statusLabel(current)}</span>
+      </div>
+
+      {all.length > 1 && (
+        <label className="field" style={{ marginBottom: 12 }}>
+          <span>サイクル</span>
+          <select value={c.id} onChange={(e) => setPicked(e.target.value)}>
+            {all.map((j) => (
+              <option key={j.cycle.id} value={j.cycle.id}>
+                {j.cycle.name}（{j.cycle.baseDate}〜{j.cycle.cutEndDate}）
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      <div className="card sub">
+        <b style={{ color: 'var(--text)' }}>{c.name}</b>　基準 {shortDate(c.baseDate)} → 増量終了 {shortDate(c.bulkEndDate)} →
+        減量終了 {shortDate(c.cutEndDate)}／{data.formula.formula.name}式
+        {!current.final && <div>減量終了日に確定します。それまでは今日までの記録で計算した途中経過です。</div>}
+      </div>
+
+      <JudgementCards j={current} data={data} />
+      {all.length > 1 && <Compare all={all} />}
+
+      <button type="button" className="btn" style={{ width: '100%' }} onClick={() => openReport(c.id)}>
+        レポートを開く（印刷・PDF）
+      </button>
     </>
   )
 }

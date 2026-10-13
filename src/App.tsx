@@ -4,6 +4,7 @@ import { Charts } from './ui/pages/Charts'
 import { Home } from './ui/pages/Home'
 import { Input } from './ui/pages/Input'
 import { Judgement } from './ui/pages/Judgement'
+import { Report } from './ui/pages/Report'
 import { Settings } from './ui/pages/Settings'
 import { useData } from './ui/useData'
 
@@ -23,6 +24,8 @@ const ICONS: Record<Tab, ReactNode> = {
 export function App() {
   const data = useData()
   const [tab, setTab] = useState<Tab>('ホーム')
+  /** 開いている判定レポートのサイクル */
+  const [report, setReport] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const toast = useCallback((m: string) => {
@@ -40,12 +43,22 @@ export function App() {
   return (
     <>
       <main className="app">
+        {data && report !== null && <Report data={data} cycleId={report} close={() => setReport(null)} />}
         {data &&
+          report === null &&
           {
             ホーム: <Home data={data} />,
             入力: <Input data={data} toast={toast} />,
             グラフ: <Charts data={data} />,
-            判定: <Judgement data={data} />,
+            判定: (
+              <Judgement
+                data={data}
+                openReport={(id) => {
+                  setReport(id)
+                  window.scrollTo({ top: 0 })
+                }}
+              />
+            ),
             設定: <Settings data={data} toast={toast} />,
           }[tab]}
       </main>
@@ -59,8 +72,9 @@ export function App() {
           <button
             key={t}
             type="button"
-            aria-current={tab === t ? 'page' : undefined}
+            aria-current={tab === t && report === null ? 'page' : undefined}
             onClick={() => {
+              setReport(null)
               setTab(t)
               window.scrollTo({ top: 0 })
             }}

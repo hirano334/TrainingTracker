@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { adjustedTotal } from './adjust'
 import { computeAlerts } from './alerts'
-import { DEFAULT_PHASES, DEFAULT_SETTINGS } from './defaults'
-import { checkpointTotals, e1rm, weeklyE1rm, weeklyTotal } from './e1rm'
+import { DEFAULT_CYCLES, DEFAULT_PHASES, DEFAULT_SETTINGS } from './defaults'
+import { checkpointTotals, weeklyE1rm, weeklyTotal } from './e1rm'
+import { epley as e1rm } from './formulas'
 import { judge, judgeClass, judgeDrop, judgePace, requiredGain, route83Pace } from './judgement'
-import { findCycles, phaseAt, targetWeightOn } from './phases'
+import { findPhasePairs, phaseAt, targetWeightOn } from './phases'
 import { sampleData } from './sample'
 import { weeklySeries } from './series'
-import type { DailyLog, Lift, Phase, Settings, TopSet } from './types'
+import type { Cycle, DailyLog, Lift, Phase, Settings, TopSet } from './types'
 import { addDays, diffDays, weekStart } from './weeks'
 import { avgWeightInWindow, latestPace, pacePerMonth, weeklyWeights } from './weight'
 
-const S: Settings = { ...DEFAULT_SETTINGS, baseTotal: 470 }
+const S: Settings = { ...DEFAULT_SETTINGS }
+const CYCLE: Cycle = { ...DEFAULT_CYCLES[0], baseTotal: 470 }
 const phase = (id: string) => DEFAULT_PHASES.find((p) => p.id === id) as Phase
 
 const log = (date: string, weight: number, bodyFatPct: number | null = null): DailyLog => ({
@@ -100,7 +102,7 @@ describe('フェーズ', () => {
       { ...phase('bulk-1'), id: 'bulk-2', startDate: '2027-03-01', endDate: '2027-04-30' },
       { ...phase('cut-1'), id: 'cut-2', startDate: '2027-05-01', endDate: '2027-05-31' },
     ]
-    expect(findCycles(more, S.baseDate).map((c) => [c.bulk.id, c.cut.id])).toEqual([
+    expect(findPhasePairs(more).map((c) => [c.bulk.id, c.cut.id])).toEqual([
       ['bulk-1', 'cut-1'],
       ['bulk-2', 'cut-2'],
     ])
@@ -117,20 +119,26 @@ describe('5.2 e1RM', () => {
     expect(e1rm(150, 2, 8.5)).toBeCloseTo(150 * (1 + 3.5 / 30))
   })
   it('週のe1RMは種目ごとの最大。試合基準×は除外', () => {
-    const w = weeklyE1rm([
-      set('2026-12-07', 'SQ', 150, 3, 8),
-      set('2026-12-10', 'SQ', 160, 1, 9),
-      set('2026-12-11', 'SQ', 200, 1, 10, false),
-    ])
+    const w = weeklyE1rm(
+      [
+        set('2026-12-07', 'SQ', 150, 3, 8),
+        set('2026-12-10', 'SQ', 160, 1, 9),
+        set('2026-12-11', 'SQ', 200, 1, 10, false),
+      ],
+      e1rm,
+    )
     expect(w.get('2026-12-07')?.SQ).toBeCloseTo(175) // 150 × (1 + 5/30)
   })
   it('トータルは3種目の合計。欠けた種目は2週前まで引き継ぐ', () => {
-    const w = weeklyE1rm([
-      set('2026-12-07', 'SQ', 150, 1, 10),
-      set('2026-12-07', 'BP', 90, 1, 10),
-      set('2026-12-07', 'DL', 180, 1, 10),
-      set('2026-12-14', 'SQ', 153, 1, 10),
-    ])
+    const w = weeklyE1rm(
+      [
+        set('2026-12-07', 'SQ', 150, 1, 10),
+        set('2026-12-07', 'BP', 90, 1, 10),
+        set('2026-12-07', 'DL', 180, 1, 10),
+        set('2026-12-14', 'SQ', 153, 1, 10),
+      ],
+      e1rm,
+    )
     const k = 1 + 1 / 30
     expect(weeklyTotal(w, '2026-12-07').total).toBeCloseTo(420 * k)
     expect(weeklyTotal(w, '2026-12-14').total).toBeCloseTo(423 * k)
@@ -139,10 +147,10 @@ describe('5.2 e1RM', () => {
   })
   it('チェックポイントの値は直近2週の週のe1RMの平均', () => {
     const sets = [...weekOfTotal('2027-02-15', 480), ...weekOfTotal('2027-02-22', 486)]
-    expect(checkpointTotals(sets, '2027-02-28').total).toBeCloseTo(483)
+    expect(checkpointTotals(sets, '2027-02-28', e1rm).total).toBeCloseTo(483)
   })
   it('片方の週しか記録がなければその値', () => {
-    expect(checkpointTotals(weekOfTotal('2027-02-22', 486), '2027-02-28').total).toBeCloseTo(486)
+    expect(checkpointTotals(weekOfTotal('2027-02-22', 486), '2027-02-28', e1rm).total).toBeCloseTo(486)
   })
 })
 
@@ -159,7 +167,7 @@ describe('5.3 体重補正', () => {
 
 describe('5.4 判定① 伸びのペース', () => {
   it('必要ペース = (74kg級標準 − 基準トータル) × 0.4', () => {
-    expect(requiredGain(S, 470)).toBeCloseTo(28)
+    expect(requiredGain(S.standard74, 470, CYCLE.requiredPaceFactor)).toBeCloseTo(28)
   })
   it('境界値', () => {
     expect(judgePace(28, 28, S)).toBe('inRange')
@@ -198,7 +206,7 @@ describe('5.7 83kg級ルート', () => {
 })
 
 describe('判定の通し計算', () => {
-  const cycle = findCycles(DEFAULT_PHASES, S.baseDate)[0]
+  const cycle = CYCLE
   // 1月末のトータル 510、2月末のトータル 498、2月末の週平均体重 74.0
   const sets = [
     ...weekOfTotal('2027-01-18', 510),
@@ -235,7 +243,7 @@ describe('判定の通し計算', () => {
     expect(j.classVerdict).toBeNull()
   })
   it('基準トータルが未入力なら判定しない', () => {
-    const j = judge({ ...S, baseTotal: null }, cycle, logs, sets, '2027-03-05')
+    const j = judge(S, { ...CYCLE, baseTotal: null }, logs, sets, '2027-03-05')
     expect(j.pace).toBeNull()
     expect(j.drop).toBeCloseTo(12)
   })
@@ -276,14 +284,14 @@ describe('5.8 アラート', () => {
 describe('サンプルデータ', () => {
   const d = sampleData()
   it('3ヶ月半ぶんの週次系列が出る', () => {
-    const rows = weeklySeries(S, DEFAULT_PHASES, d.dailyLogs, d.topSets, d.waistLogs, '2026-11-16', '2027-02-28')
+    const rows = weeklySeries(S, 72.5, DEFAULT_PHASES, d.dailyLogs, d.topSets, d.waistLogs, '2026-11-16', '2027-02-28')
     expect(rows).toHaveLength(15)
     expect(rows.every((r) => r.avgWeight !== null && r.waist !== null)).toBe(true)
     expect(rows.at(-1)?.total).not.toBeNull()
     expect(rows.at(-1)?.adjTotal).toBeLessThan(rows.at(-1)?.total as number)
   })
   it('判定まで計算できる', () => {
-    const j = judge(S, findCycles(DEFAULT_PHASES, S.baseDate)[0], d.dailyLogs, d.topSets, '2027-02-28')
+    const j = judge(S, CYCLE, d.dailyLogs, d.topSets, '2027-02-28')
     expect(j.final).toBe(true)
     expect(j.classVerdict).not.toBeNull()
   })

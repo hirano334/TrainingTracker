@@ -1,5 +1,6 @@
 import { adjustedTotal } from './adjust'
-import { setE1rm, weeklyE1rm, weeklyTotal } from './e1rm'
+import { weeklyE1rm, weeklyTotal } from './e1rm'
+import { resolveFormula } from './formulas'
 import { targetWeightAt } from './phases'
 import type { DailyLog, ISODate, Phase, Settings, TopSet, WaistLog } from './types'
 import { addDays, weekStart, weekStartsBetween } from './weeks'
@@ -25,6 +26,8 @@ export interface WeekRow {
 /** グラフ・サマリー用の週次系列 */
 export function weeklySeries(
   s: Settings,
+  /** 体重補正の基準体重 */
+  refWeight: number,
   phases: Phase[],
   logs: DailyLog[],
   sets: TopSet[],
@@ -33,14 +36,15 @@ export function weeklySeries(
   to: ISODate,
 ): WeekRow[] {
   const weights = weeklyWeights(logs)
-  const e1 = weeklyE1rm(sets)
+  const fn = resolveFormula(s).fn
+  const e1 = weeklyE1rm(sets, fn)
 
   const nonComp = new Map<ISODate, Record<string, number>>()
   for (const x of sets) {
     if (x.deleted || x.comp) continue
     const w = weekStart(x.date)
     const row = nonComp.get(w) ?? {}
-    row[x.lift] = Math.max(row[x.lift] ?? 0, setE1rm(x))
+    row[x.lift] = Math.max(row[x.lift] ?? 0, fn(x.weight, x.reps, x.rpe))
     nonComp.set(w, row)
   }
 
@@ -69,9 +73,41 @@ export function weeklySeries(
       total: t.total,
       adjTotal:
         t.total !== null && avgWeight !== null
-          ? adjustedTotal(t.total, s.baseWeight, avgWeight, s.allometricExponent)
+          ? adjustedTotal(t.total, refWeight, avgWeight, s.allometricExponent)
           : null,
       waist: ws ? ws.reduce((a, b) => a + b, 0) / ws.length : null,
     }
   })
+}
+
+export interface DayRow {
+  date: ISODate
+  weight: number | null
+  /** その日までの7日移動平均。記録が少ない日は出さない */
+  trend: number | null
+  target: number | null
+}
+
+/** 移動平均を出すのに必要な、7日間のうちの記録日数 */
+export const MIN_DAYS_FOR_TREND = 4
+
+/** 日々の体重と7日移動平均 */
+export function dailySeries(phases: Phase[], logs: DailyLog[], from: ISODate, to: ISODate): DayRow[] {
+  const byDate = new Map<ISODate, number>()
+  for (const l of logs) if (!l.deleted) byDate.set(l.date, l.weight)
+  const out: DayRow[] = []
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const window: number[] = []
+    for (let i = 0; i < 7; i++) {
+      const w = byDate.get(addDays(d, -i))
+      if (w !== undefined) window.push(w)
+    }
+    out.push({
+      date: d,
+      weight: byDate.get(d) ?? null,
+      trend: window.length >= MIN_DAYS_FOR_TREND ? window.reduce((a, b) => a + b, 0) / window.length : null,
+      target: targetWeightAt(phases, d),
+    })
+  }
+  return out
 }
