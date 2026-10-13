@@ -50,11 +50,11 @@ export function csv(header: string[], rows: (string | number | null)[][]): strin
 
 export function dailyLogsCSV(logs: DailyLog[]): string {
   return csv(
-    ['日付', '体重(kg)', '体脂肪率(%)', '摂取カロリー(kcal)', 'タンパク質(g)'],
+    ['日付', '体重(kg)', '体脂肪率(%)', '摂取カロリー(kcal)', 'タンパク質(g)', '睡眠時心拍数(bpm)'],
     logs
       .filter((l) => !l.deleted)
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((l) => [l.date, l.weight, l.bodyFatPct, l.kcal, l.proteinG]),
+      .map((l) => [l.date, l.weight, l.bodyFatPct, l.kcal, l.proteinG, l.sleepHr ?? null]),
   )
 }
 

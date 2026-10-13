@@ -94,6 +94,7 @@ function WeightForm({ data, toast }: FormProps) {
   const [bodyFatPct, setBodyFat] = useState<number | null>(null)
   const [kcal, setKcal] = useState<number | null>(null)
   const [proteinG, setProtein] = useState<number | null>(null)
+  const [sleepHr, setSleepHr] = useState<number | null>(null)
 
   // 日付を変えたら、その日の記録（無ければ直前の体重）を出す
   useEffect(() => {
@@ -101,12 +102,13 @@ function WeightForm({ data, toast }: FormProps) {
     setBodyFat(existing?.bodyFatPct ?? null)
     setKcal(existing?.kcal ?? null)
     setProtein(existing?.proteinG ?? null)
+    setSleepHr(existing?.sleepHr ?? null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, existing?.updatedAt])
 
   const save = async () => {
     if (weight === null || weight <= 0) return
-    await put('dailyLogs', { date, weight, bodyFatPct, kcal, proteinG })
+    await put('dailyLogs', { date, weight, bodyFatPct, kcal, proteinG, sleepHr })
     toast('体重を保存しました')
   }
 
@@ -118,6 +120,9 @@ function WeightForm({ data, toast }: FormProps) {
           <span className="label">体重（起床後・排尿後）kg{existing ? '　※この日は入力済み' : ''}</span>
           <Stepper label="体重" value={weight} onChange={setWeight} step={0.1} />
         </div>
+        {show.heartRate && (
+          <NumField label="睡眠時平均心拍数 bpm（任意）" value={sleepHr} onChange={setSleepHr} />
+        )}
         {(show.bodyFat || show.nutrition) && (
           <details open={bodyFatPct !== null || kcal !== null || proteinG !== null || undefined}>
             <summary>
@@ -152,6 +157,7 @@ function WeightForm({ data, toast }: FormProps) {
             {shortDate(l.date)}　<b>{f1(l.weight)}</b> kg
             {l.bodyFatPct !== null && `　${f1(l.bodyFatPct)}%`}
             {l.kcal !== null && `　${l.kcal}kcal`}
+            {l.sleepHr != null && `　♡${l.sleepHr}`}
           </>
         )}
       />
@@ -234,7 +240,7 @@ function SetForm({ data, toast }: FormProps) {
         </label>
         <TextField label="メモ（任意）" value={memo} onChange={setMemo} placeholder="睡眠不足・疲労など" />
         <div className="row between">
-          <span className="sub">推定1RM（{data.formula.formula.name}式）</span>
+          <span className="sub">推定1RM（{data.formula.formula.name}）</span>
           <span className="num">
             <b>{ready ? f1(e1rm(weight, reps, rpe)) : '—'}</b> kg{ready && !comp && '（判定には使わない）'}
           </span>

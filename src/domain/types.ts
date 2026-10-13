@@ -20,6 +20,8 @@ export interface ShowFlags {
   bodyFat: boolean
   /** チェックポイント測定（実測MAX・睡眠・疲労度） */
   checkpoint: boolean
+  /** 睡眠時平均心拍数 */
+  heartRate: boolean
 }
 
 /** 要件定義 2章。計算に使う数値はすべてここに置く */
@@ -79,21 +81,25 @@ export interface Formula {
 }
 
 /**
- * 判定の対象にする1サイクル。フェーズ表から割り出さず、利用者が申告する。
- * 5.4 の係数はサイクルごとに違う（第1サイクルは残り約2.5サイクルを前提にした値）。
+ * 1サイクル。どのフェーズをまとめて1サイクルと見るかを利用者が選ぶ。
+ * 日付は選んだフェーズから決まる（domain/cycles.ts）。
+ * 5.4 の係数はサイクルごとに違う（本命大会までの残りサイクル数で変わる）。
  */
 export interface Cycle extends SyncMeta {
   id: string
   name: string
-  baseDate: ISODate
+  phaseIds: string[]
+  /** 基準日（最初のフェーズが始まる前日）の体重とトータル */
   baseWeight: number
   baseTotal: number | null
-  bulkEndDate: ISODate
-  cutEndDate: ISODate
   /** 5.4 必要ペースの係数 */
   requiredPaceFactor: number
   /** 5.4 本命大会時点の予測に使う倍率 */
   projectionMultiplier: number
+  /** 振り返り：うまくいったこと・気づいたこと */
+  memo: string
+  /** 振り返り：次のサイクルで変えること */
+  nextNote: string
 }
 
 export type PhaseKind = 'bulk' | 'cut' | 'checkpoint'
@@ -125,6 +131,8 @@ export interface DailyLog extends SyncMeta {
   bodyFatPct: number | null
   kcal: number | null
   proteinG: number | null
+  /** 睡眠時平均心拍数 (bpm)。旧版の記録には無い */
+  sleepHr?: number | null
 }
 
 /** 4.2 */

@@ -1,6 +1,5 @@
 import Dexie, { type EntityTable, type Table } from 'dexie'
 import { DEFAULT_CYCLE_FACTORS, DEFAULT_SETTINGS } from '../domain/defaults'
-import { EXAMPLE_CYCLES } from '../domain/example'
 import { findPhasePairs } from '../domain/phases'
 import {
   TABLES,
@@ -23,7 +22,14 @@ export interface Meta {
 }
 
 /** version 1 の頃に初期値として入っていた第1サイクル。version 2 への移行で、欠けた値の補いに使う */
-const LEGACY_CYCLE = EXAMPLE_CYCLES[0]
+const LEGACY_CYCLE = {
+  id: 'cycle-1',
+  name: '第1サイクル',
+  baseDate: '2026-11-30',
+  baseWeight: 72.5,
+  bulkEndDate: '2027-01-31',
+  cutEndDate: '2027-02-28',
+}
 
 /** meta のキー：初回セットアップを済ませたか（飛ばした場合も含む） */
 export const SETUP_DONE = 'setupDone'
@@ -50,7 +56,8 @@ export class TrackerDB extends Dexie {
       meta: 'key',
     })
     // 2: 判定の対象を、フェーズ表からの自動割り出しから「申告したサイクル」に変更。
-    // それまで設定にあった基準トータルと係数を、第1サイクルとして引き継ぐ
+    // それまで設定にあった基準トータルと係数を、第1サイクルとして引き継ぐ。
+    // ここで書くのは日付を直接持つ当時の形で、読み出し時に normalizeCycle が今の形に読み替える
     this.version(2)
       .stores({ cycles: 'id' })
       .upgrade(async (tx) => {
@@ -74,7 +81,7 @@ export class TrackerDB extends Dexie {
           cutEndDate: pair?.cut.endDate ?? LEGACY_CYCLE.cutEndDate,
           requiredPaceFactor: old?.requiredPaceFactor ?? DEFAULT_CYCLE_FACTORS.requiredPaceFactor,
           projectionMultiplier: old?.projectionMultiplier ?? DEFAULT_CYCLE_FACTORS.projectionMultiplier,
-        } satisfies Cycle)
+        })
       })
     // 3: 初期値を特定の人の計画ではなく白紙にし、初回セットアップで作るようにした。
     // それまでのデータベースには計画が入っているので、セットアップ済みとして扱う

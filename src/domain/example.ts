@@ -20,6 +20,8 @@ export const EXAMPLE_SETTINGS: Settings = {
   upperRouteMonths: 7,
   classNote: '74級は体脂肪11〜12%を維持、83級は大会時に約17%',
   mainMeetDate: '2027-10-01',
+  // 要件定義 5.2 の式
+  e1rmFormulaId: 'epley',
 }
 
 /** 要件定義 3章 */
@@ -87,17 +89,17 @@ export const EXAMPLE_PHASES: Phase[] = [
   },
 ]
 
-/** 要件定義 1章の第1サイクル */
+/** 要件定義 1章の第1サイクル：増量1 → 減量1 */
 export const EXAMPLE_CYCLES: Cycle[] = [
   {
     id: 'cycle-1',
     updatedAt: 0,
     name: '第1サイクル',
-    baseDate: '2026-11-30',
+    phaseIds: ['bulk-1', 'cut-1'],
     baseWeight: 72.5,
     baseTotal: null,
-    bulkEndDate: '2027-01-31',
-    cutEndDate: '2027-02-28',
     ...DEFAULT_CYCLE_FACTORS,
+    memo: '',
+    nextNote: '',
   },
 ]

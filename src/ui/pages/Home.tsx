@@ -175,7 +175,7 @@ export function Home({ data }: { data: Data }) {
 
       <div className="card">
         <div className="sub">
-          直近のトータルe1RM{strength ? `（${shortDate(strength.weekStart)}の週）` : ''}・{data.formula.formula.name}式
+          直近のトータルe1RM{strength ? `（${shortDate(strength.weekStart)}の週）` : ''}・{data.formula.formula.name}
         </div>
         <div className="stats" style={{ marginTop: 6 }}>
           <div className="stat">

@@ -25,8 +25,8 @@ export function Settings({ data, toast }: Props) {
       </div>
       <Params data={data} toast={toast} />
       <FormulaCard data={data} toast={toast} />
-      <CyclesCard data={data} toast={toast} />
       <Phases data={data} toast={toast} />
+      <CyclesCard data={data} toast={toast} />
       <DriveSync toast={toast} />
       <Backup data={data} toast={toast} />
     </>
@@ -38,6 +38,7 @@ const SHOW_LABELS: [keyof ShowFlags, string, string][] = [
   ['bodyFat', '体脂肪率', '体重計の表示値と、上限超過の警告'],
   ['nutrition', 'カロリー・タンパク質', '摂取量の記録、維持カロリー、カロリー目安'],
   ['checkpoint', 'チェックポイント測定', '実測MAX・睡眠時間・疲労度'],
+  ['heartRate', '睡眠時平均心拍数', '毎朝の入力とグラフ。判定や警告には使わない'],
 ]
 
 const ESTIMATE_DAYS = [14, 21, 28] as const
@@ -254,7 +255,8 @@ function PhaseEditor({ phase, toast }: { phase: Phase; toast: (m: string) => voi
           <label className="field">
             <span>種別</span>
             <select value={d.kind} onChange={(e) => set('kind', e.target.value as PhaseKind)}>
-              {KINDS.map((k) => (
+              {/* 「判定」の目印は旧版のもの。既にある行でだけ選べる */}
+              {KINDS.filter((k) => k.value !== 'checkpoint' || phase.kind === 'checkpoint').map((k) => (
                 <option key={k.value} value={k.value}>
                   {k.label}
                 </option>
@@ -336,7 +338,7 @@ function Phases({ data, toast }: Props) {
   return (
     <div className="card">
       <h2>フェーズ表</h2>
-      <div className="muted">行を足せば第2サイクル以降も同じ計算で動きます。判定パネルは基準日より後の最初の「増量 → 減量」を使います。</div>
+      <div className="muted">増量・減量の期間と目標体重。ホームの目標ラインとペースの警告に使います。下の「サイクル」で、振り返る単位にまとめます。</div>
       {data.phases.map((p) => (
         <PhaseEditor key={p.id} phase={p} toast={toast} />
       ))}

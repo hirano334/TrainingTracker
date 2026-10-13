@@ -208,6 +208,10 @@ const DAILY: Series<DayRow>[] = [
   { key: 'trend', name: '7日移動平均', color: C1, lineOnly: true },
   { key: 'target', name: '目標体重', color: REF, reference: true },
 ]
+const HEART: Series<DayRow>[] = [
+  { key: 'sleepHr', name: '睡眠時心拍数', color: C1, faint: true },
+  { key: 'hrTrend', name: '7日移動平均', color: C1, lineOnly: true },
+]
 const WEIGHT: Series<WeekRow>[] = [
   { key: 'avgWeight', name: '週平均体重', color: C1 },
   { key: 'targetWeight', name: '目標体重', color: REF, reference: true },
@@ -282,7 +286,7 @@ export function ChartSet({ data, from, to, compact }: { data: Data; from: ISODat
         <h2>トータルe1RM（kg）</h2>
         <Chart {...week} series={TOTAL} unit="kg" height={h(220)} />
         <div className="muted">
-          {data.formula.formula.name}式。記録のない種目は直前2週以内の値を引き継いで合計。試合基準×のセットは含まない。
+          {data.formula.formula.name}。記録のない種目は直前2週以内の値を引き継いで合計。試合基準×のセットは含まない。
           補正後は{f1(data.refWeight)}kg換算。
         </div>
         <DataTable {...week} series={TOTAL} xLabel="週" />
@@ -294,6 +298,15 @@ export function ChartSet({ data, from, to, compact }: { data: Data; from: ISODat
         <div className="muted">その週の最大値。試合基準×のセットは表にだけ出す。</div>
         <DataTable {...week} series={LIFT_TABLE} xLabel="週" />
       </div>
+
+      {data.settings.show.heartRate && (
+        <div className="card">
+          <h2>睡眠時平均心拍数（bpm）</h2>
+          <Chart rows={days} xKey="date" series={HEART} marks={dayMarks} unit="bpm" title={dayTitle} height={h(190)} />
+          <div className="muted">疲労・体調・飲酒などで上下する。トータルや体重の動きと見比べる材料として。</div>
+          <DataTable rows={days} xKey="date" series={HEART} xLabel="日付" />
+        </div>
+      )}
 
       {data.settings.show.waist && (
       <div className="card">

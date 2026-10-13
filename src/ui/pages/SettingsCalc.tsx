@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { newId, put, remove } from '../../db/db'
+import { resolveCycle, usablePhases } from '../../domain/cycles'
 import { DEFAULT_CYCLE_FACTORS } from '../../domain/defaults'
 import { checkpointTotals } from '../../domain/e1rm'
 import { FUNCTION_NAMES } from '../../domain/expr'
@@ -10,13 +11,13 @@ import {
   DEFAULT_FORMULA_ID,
   validateFormula,
 } from '../../domain/formulas'
-import { findPhasePairs } from '../../domain/phases'
 import { suggestFactors } from '../../domain/planning'
 import type { Cycle } from '../../domain/types'
-import { addDays, todayISO } from '../../domain/weeks'
+import { shortDate } from '../../domain/weeks'
 import { avgWeightInWindow } from '../../domain/weight'
-import { DateField, NumField, TextField } from '../components/Fields'
+import { NumField, TextField } from '../components/Fields'
 import { f1 } from '../format'
+import { storedCycle } from './Cycle'
 import type { SettingsProps } from './Settings'
 
 /** 式どうしを見比べるための例 */
@@ -135,7 +136,7 @@ export function FormulaCard({ data, toast }: SettingsProps) {
               type="button"
               className="btn small"
               onClick={async () => {
-                await put('cycles', { ...c, baseTotal: Number((total as number).toFixed(1)) })
+                await put('cycles', { ...storedCycle(c), baseTotal: Number((total as number).toFixed(1)) })
                 toast(`${c.name}の基準トータルを更新しました`)
               }}
             >
@@ -185,20 +186,25 @@ export function FormulaCard({ data, toast }: SettingsProps) {
   )
 }
 
-function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Cycle }) {
+type Draft = Omit<Cycle, 'updatedAt' | 'deleted'>
+
+const KIND = { bulk: '増量', cut: '減量', checkpoint: '' } as const
+
+function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Draft }) {
   const [d, setD] = useState(cycle)
   useEffect(() => setD(cycle), [cycle])
-  const set = <K extends keyof Cycle>(k: K, v: Cycle[K]) => setD((p) => ({ ...p, [k]: v }))
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }))
   const num = (k: 'baseWeight' | 'requiredPaceFactor' | 'projectionMultiplier') => (v: number | null) => {
     if (v !== null) set(k, v)
   }
   const dirty = JSON.stringify(d) !== JSON.stringify(cycle)
-  const ordered = d.baseDate < d.bulkEndDate && d.bulkEndDate < d.cutEndDate
 
-  const measuredWeight = avgWeightInWindow(data.dailyLogs, d.baseDate)
-  const measuredTotal = checkpointTotals(data.topSets, d.baseDate, data.formula.fn).total
-  const pairs = findPhasePairs(data.phases).filter((p) => p.bulk.startDate !== null)
-  const suggested = ordered ? suggestFactors(d, data.settings.mainMeetDate) : null
+  const candidates = usablePhases(data.phases)
+  // 選んだフェーズから決まる日付
+  const span = resolveCycle({ ...d, updatedAt: 0 }, data.phases)
+  const measuredWeight = span ? avgWeightInWindow(data.dailyLogs, span.baseDate) : null
+  const measuredTotal = span ? checkpointTotals(data.topSets, span.baseDate, data.formula.fn).total : null
+  const suggested = span ? suggestFactors({ baseDate: span.baseDate, cutEndDate: span.endDate }, data.settings.mainMeetDate) : null
   const differs =
     suggested !== null &&
     (suggested.requiredPaceFactor !== d.requiredPaceFactor || suggested.projectionMultiplier !== d.projectionMultiplier)
@@ -206,48 +212,45 @@ function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Cycle }) {
   return (
     <details>
       <summary>
-        <b style={{ color: 'var(--text)' }}>{cycle.name}</b>　{cycle.baseDate} → {cycle.bulkEndDate} → {cycle.cutEndDate}
+        <b style={{ color: 'var(--text)' }}>{cycle.name}</b>
+        {'　'}
+        {span ? `${span.phases.map((p) => p.name).join(' → ')}（〜${span.endDate}）` : 'フェーズ未選択'}
         {'　'}基準 {f1(cycle.baseTotal)}kg
       </summary>
       <div className="stack" style={{ margin: '8px 0 16px' }}>
         <TextField label="名前" value={d.name} onChange={(v) => set('name', v)} />
-        {pairs.length > 0 && (
-          <label className="field">
-            <span>フェーズ表から日付を入れる</span>
-            <select
-              value=""
-              onChange={(e) => {
-                const p = pairs[Number(e.target.value)]
-                if (!p) return
-                setD((prev) => ({
-                  ...prev,
-                  baseDate: addDays(p.bulk.startDate as string, -1),
-                  bulkEndDate: p.bulk.endDate,
-                  cutEndDate: p.cut.endDate,
-                }))
-              }}
-            >
-              <option value="">選ぶ…</option>
-              {pairs.map((p, i) => (
-                <option key={p.bulk.id + p.cut.id} value={i}>
-                  {p.bulk.name} → {p.cut.name}（〜{p.cut.endDate}）
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <div className="grid2" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
-          <DateField label="基準日" value={d.baseDate} onChange={(v) => v && set('baseDate', v)} />
-          <DateField label="増量終了日" value={d.bulkEndDate} onChange={(v) => v && set('bulkEndDate', v)} />
-          <DateField label="減量終了日" value={d.cutEndDate} onChange={(v) => v && set('cutEndDate', v)} />
-        </div>
-        {!ordered && (
-          <div className="sub" style={{ color: 'var(--critical)' }}>
-            基準日 → 増量終了日 → 減量終了日 の順になるようにしてください。
-          </div>
-        )}
         <div>
-          <NumField label="基準体重 kg（基準日の実測値）" value={d.baseWeight} onChange={num('baseWeight')} />
+          <span className="label">このサイクルに含めるフェーズ</span>
+          {candidates.length === 0 && <div className="muted">開始日のある増量・減量のフェーズが、フェーズ表にありません。</div>}
+          {candidates.map((p) => (
+            <label className="toggle" key={p.id}>
+              <span>
+                {p.name}
+                <span className="muted" style={{ display: 'block' }}>
+                  {KIND[p.kind]}　{p.startDate}〜{p.endDate}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={d.phaseIds.includes(p.id)}
+                onChange={(e) =>
+                  set('phaseIds', e.target.checked ? [...d.phaseIds, p.id] : d.phaseIds.filter((x) => x !== p.id))
+                }
+              />
+            </label>
+          ))}
+          <div className="muted">
+            {span
+              ? `基準日 ${span.baseDate}（最初のフェーズの前日）〜 ${span.endDate}。日付はフェーズ表で変えます。`
+              : 'フェーズを1つ以上選ぶと、まとめと判定が出ます。'}
+          </div>
+        </div>
+        <div>
+          <NumField
+            label={`基準体重 kg${span ? `（${shortDate(span.baseDate)}の実測値）` : ''}`}
+            value={d.baseWeight}
+            onChange={num('baseWeight')}
+          />
           {measuredWeight !== null && (
             <button type="button" className="link" onClick={() => set('baseWeight', Number(measuredWeight.toFixed(1)))}>
               基準日までの7日平均 {f1(measuredWeight)}kg を使う
@@ -255,19 +258,14 @@ function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Cycle }) {
           )}
         </div>
         <div>
-          <NumField
-            label="基準トータル kg（基準日に測定）"
-            value={d.baseTotal}
-            onChange={(v) => set('baseTotal', v)}
-            placeholder="未定"
-          />
+          <NumField label="基準トータル kg" value={d.baseTotal} onChange={(v) => set('baseTotal', v)} placeholder="未定" />
           {measuredTotal !== null && (
             <button type="button" className="link" onClick={() => set('baseTotal', Number(measuredTotal.toFixed(1)))}>
               基準日までの2週の推定1RM合計 {f1(measuredTotal)}kg を使う
             </button>
           )}
           <div className="muted">
-            判定で比べる相手は推定1RM（{data.formula.formula.name}式）なので、ここも同じ方法の値にすると比較が揃います。
+            判定で比べる相手は推定1RM（{data.formula.formula.name}）なので、ここも同じ方法の値にすると比較が揃います。
           </div>
         </div>
         <div className="grid2">
@@ -298,7 +296,7 @@ function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Cycle }) {
           <button
             type="button"
             className="btn grow"
-            disabled={!dirty || !ordered || d.name.trim() === ''}
+            disabled={!dirty || d.name.trim() === ''}
             onClick={async () => {
               await put('cycles', d)
               toast('サイクルを保存しました')
@@ -310,7 +308,7 @@ function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Cycle }) {
             type="button"
             className="btn danger"
             onClick={async () => {
-              if (!confirm(`「${cycle.name}」を削除しますか？`)) return
+              if (!confirm(`「${cycle.name}」を削除しますか？振り返りのメモも消えます。`)) return
               await remove('cycles', cycle.id)
               toast('サイクルを削除しました')
             }}
@@ -324,32 +322,34 @@ function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Cycle }) {
 }
 
 export function CyclesCard({ data, toast }: SettingsProps) {
+  const drafts: Draft[] = [...data.cycles.map(storedCycle), ...data.unresolvedCycles]
   const add = async () => {
+    // まだどのサイクルにも入っていないフェーズを、新しいサイクルの候補にする
+    const used = new Set(drafts.flatMap((c) => c.phaseIds))
+    const free = usablePhases(data.phases).filter((p) => !used.has(p.id))
     const last = data.cycles.at(-1)
-    // 直前のサイクルの終わりを次の基準にする。フェーズ表に続きがあればその日付を入れる
-    const baseDate = last?.cutEndDate ?? todayISO()
-    const pair = findPhasePairs(data.phases).find((p) => p.bulk.endDate > baseDate)
-    const bulkEndDate = pair?.bulk.endDate ?? addDays(baseDate, 61)
+    const first = free[0]
+    const weight = first ? avgWeightInWindow(data.dailyLogs, first.startDate as string) : null
     await put('cycles', {
       id: newId(),
-      name: `第${data.cycles.length + 1}サイクル`,
-      baseDate,
-      baseWeight: Number((avgWeightInWindow(data.dailyLogs, baseDate) ?? last?.baseWeight ?? data.settings.baseWeight).toFixed(1)),
+      name: `第${drafts.length + 1}サイクル`,
+      phaseIds: free.map((p) => p.id),
+      baseWeight: Number((weight ?? first?.startWeight ?? last?.baseWeight ?? data.settings.baseWeight).toFixed(1)),
       baseTotal: null,
-      bulkEndDate,
-      cutEndDate: pair?.cut.endDate ?? addDays(bulkEndDate, 28),
       ...DEFAULT_CYCLE_FACTORS,
+      memo: '',
+      nextNote: '',
     })
-    toast('サイクルを追加しました。日付と基準値を確認してください')
+    toast('サイクルを追加しました。含めるフェーズと基準値を確認してください')
   }
   return (
     <div className="card">
-      <h2>サイクル（判定の対象）</h2>
+      <h2>サイクル</h2>
       <div className="muted">
-        どの期間を1サイクルとして判定するかは、ここで申告します。フェーズ表を変えても自動では変わりません。
+        フェーズ表のフェーズを選んで、まとめて振り返る単位（サイクル）にします。日付はフェーズから決まります。
         グラフの体重補正は、最初のサイクルの基準体重（{f1(data.refWeight)}kg）に換算します。
       </div>
-      {data.cycles.map((c) => (
+      {drafts.map((c) => (
         <CycleEditor key={c.id} cycle={c} data={data} toast={toast} />
       ))}
       <button type="button" className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => void add()}>

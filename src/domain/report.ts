@@ -1,17 +1,19 @@
 import { computeAlerts, type Alert } from './alerts'
 import { estimateMaintenance, type MaintenanceEstimate } from './energy'
 import { resolveFormula } from './formulas'
-import { judge, referenceWeight, sortCycles, type Judgement } from './judgement'
+import type { ResolvedCycle } from './cycles'
+import { judge, referenceWeight, type Judgement } from './judgement'
 import { records } from './records'
 import { weeklySeries, type WeekRow } from './series'
-import type { Cycle, DailyLog, ISODate, Lift, Phase, Settings, TopSet, WaistLog } from './types'
+import type { DailyLog, ISODate, Lift, Phase, Settings, TopSet, WaistLog } from './types'
 import { LIFTS } from './types'
 import { addDays } from './weeks'
 
 export interface ResultsInput {
   settings: Settings
   phases: Phase[]
-  cycles: Cycle[]
+  /** 基準日の古い順 */
+  cycles: ResolvedCycle[]
   dailyLogs: DailyLog[]
   waistLogs: WaistLog[]
   topSets: TopSet[]
@@ -66,7 +68,7 @@ export function buildResults(d: ResultsInput, asOf: ISODate, now: Date = new Dat
     referenceWeight: ref,
     settings: s,
     phases: d.phases,
-    judgements: sortCycles(d.cycles).map((c) => judge(s, c, d.dailyLogs, d.topSets, asOf)),
+    judgements: d.cycles.map((c) => judge(s, c, d.dailyLogs, d.topSets, asOf)),
     weekly: weeklySeries(s, ref, d.phases, d.dailyLogs, d.topSets, d.waistLogs, from, to),
     alerts: computeAlerts(s, d.phases, d.dailyLogs, d.topSets, asOf),
     records: Object.fromEntries(

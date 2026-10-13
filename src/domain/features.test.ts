@@ -13,11 +13,12 @@ import { brokenRecords, records } from './records'
 import { buildResults, weeklyTable } from './report'
 import { sampleData } from './sample'
 import { dailySeries } from './series'
-import type { Cycle, DailyLog, Lift, Settings, TopSet } from './types'
+import { normalizeCycle, resolveCycle, type ResolvedCycle } from './cycles'
+import type { DailyLog, Lift, Settings, TopSet } from './types'
 import { addDays } from './weeks'
 
 const S: Settings = { ...EXAMPLE_SETTINGS }
-const CYCLE: Cycle = { ...EXAMPLE_CYCLES[0], baseTotal: 470 }
+const CYCLE = resolveCycle({ ...EXAMPLE_CYCLES[0], baseTotal: 470 }, EXAMPLE_PHASES) as ResolvedCycle
 const log = (date: string, weight: number, kcal: number | null = null): DailyLog => ({
   date,
   weight,
@@ -60,15 +61,13 @@ describe('式の切り替え', () => {
 describe('サイクルの申告', () => {
   it('2サイクル目を自分の基準で判定できる', () => {
     const d = sampleData()
-    const c2: Cycle = {
+    const c2: ResolvedCycle = {
       ...CYCLE,
       id: 'c2',
       name: '第2サイクル',
       baseDate: '2026-12-31',
       baseWeight: 74,
       baseTotal: 480,
-      bulkEndDate: '2027-01-31',
-      cutEndDate: '2027-02-28',
       requiredPaceFactor: 0.5,
       projectionMultiplier: 1.5,
     }
@@ -124,6 +123,14 @@ describe('サイクルの申告', () => {
       cutEndDate: '2027-02-28',
       requiredPaceFactor: 0.45,
     })
+    // 日付を直接持っていたサイクルは、その期間のフェーズを含めたものとして読み替える
+    const c = normalizeCycle(cycles[0], (await readAll(d)).phases)
+    expect(c.phaseIds).toEqual(['bulk-1', 'cut-1'])
+    expect(resolveCycle(c, (await readAll(d)).phases)).toMatchObject({
+      baseDate: '2026-11-30',
+      endDate: '2027-02-28',
+      dropRefDate: '2027-01-31',
+    })
     // 計画が入っているデータベースなので、初回セットアップは出さない
     expect(await getMeta(SETUP_DONE, d)).toBe(true)
     // 設定は読み出すときに今の形へ読み替える
@@ -139,7 +146,9 @@ describe('サイクルの申告', () => {
       dropNormalMaxPct: 2,
       dropGreyMaxPct: 3,
       mainMeetDate: '2027-10-01',
-      show: { waist: true, nutrition: true, bodyFat: true, checkpoint: true },
+      show: { waist: true, nutrition: true, bodyFat: true, checkpoint: true, heartRate: false },
+      // 式を選べるようになる前の記録なので、Epley のまま
+      e1rmFormulaId: 'epley',
     })
   })
 })

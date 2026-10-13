@@ -3,7 +3,8 @@ import { useMemo, useSyncExternalStore } from 'react'
 import { getMeta, readAll, SETUP_DONE } from '../db/db'
 import { normalizeSettings } from '../domain/defaults'
 import { resolveFormula, type ResolvedFormula } from '../domain/formulas'
-import { referenceWeight, sortCycles } from '../domain/judgement'
+import { normalizeCycle, resolveCycles, type ResolvedCycle } from '../domain/cycles'
+import { referenceWeight } from '../domain/judgement'
 import { activePhases } from '../domain/phases'
 import type { Checkpoint, Cycle, DailyLog, Phase, Settings, TopSet, WaistLog } from '../domain/types'
 import { getSyncState, subscribeSync, type SyncState } from '../sync/syncEngine'
@@ -17,8 +18,10 @@ export interface Data {
   waistLogs: WaistLog[]
   topSets: TopSet[]
   checkpoints: Checkpoint[]
-  /** 基準日の古い順 */
-  cycles: Cycle[]
+  /** フェーズが決まっているサイクル。基準日の古い順 */
+  cycles: ResolvedCycle[]
+  /** フェーズが選ばれていない（または消えた）サイクル */
+  unresolvedCycles: Cycle[]
   /** 設定で選ばれている推定1RMの式 */
   formula: ResolvedFormula
   /** グラフの体重補正に使う基準体重 */
@@ -35,15 +38,21 @@ export function useData(): Data | undefined {
     if (!all) return undefined
     // 旧版で保存した設定を今の形に読み替える
     const settings = normalizeSettings(all.settings.find((s) => !s.deleted))
-    const cycles = sortCycles(all.cycles)
+    const phases = activePhases(all.phases)
+    // 旧版のサイクル（日付を直接持つ）も、フェーズから組んだ形に読み替える
+    const { cycles, unresolved } = resolveCycles(
+      all.cycles.map((c) => normalizeCycle(c, phases)),
+      phases,
+    )
     return {
       settings,
-      phases: activePhases(all.phases),
+      phases,
       dailyLogs: live(all.dailyLogs),
       waistLogs: live(all.waistLogs),
       topSets: live(all.topSets),
       checkpoints: live(all.checkpoints),
       cycles,
+      unresolvedCycles: unresolved,
       formula: resolveFormula(settings),
       refWeight: referenceWeight(settings, cycles),
     }

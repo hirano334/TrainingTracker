@@ -61,6 +61,7 @@ const COLUMNS = {
   bodyFatPct: ['bodyfat', 'bf', 'fat', '体脂肪率', '体脂肪'],
   kcal: ['kcal', 'calories', 'カロリー', '摂取カロリー'],
   proteinG: ['protein', 'タンパク質', 'たんぱく質'],
+  sleepHr: ['sleephr', 'hr', 'heartrate', '睡眠時心拍数', '心拍数'],
   reps: ['reps', '回数'],
   rpe: ['rpe'],
   comp: ['comp', '試合基準'],
@@ -178,14 +179,19 @@ export function parseImport(text: string): ParsedImport {
   for (const { line, cells } of body) {
     const date = parseDate(get(cells, 'date') ?? '')
     const weight = num(get(cells, 'weight'))
-    const optional = [num(get(cells, 'bodyFatPct')), num(get(cells, 'kcal')), num(get(cells, 'proteinG'))]
+    const optional = [
+      num(get(cells, 'bodyFatPct')),
+      num(get(cells, 'kcal')),
+      num(get(cells, 'proteinG')),
+      num(get(cells, 'sleepHr')),
+    ]
     const reason =
       date === null
         ? '日付が読めません'
         : weight === null || !(weight > 0)
           ? '体重が読めません'
           : optional.some((x) => x !== null && !(x >= 0))
-            ? '体脂肪率・カロリー・タンパク質に数値でない値があります'
+            ? '体脂肪率・カロリー・タンパク質・心拍数に数値でない値があります'
             : null
     if (reason) {
       errors.push({ line, reason })
@@ -197,6 +203,8 @@ export function parseImport(text: string): ParsedImport {
       bodyFatPct: optional[0],
       kcal: optional[1],
       proteinG: optional[2],
+      // 心拍数の列が無いファイルでは項目ごと持たない（元の記録と同じ形にする）
+      ...(optional[3] !== null ? { sleepHr: optional[3] } : {}),
     })
   }
   return { kind: 'dailyLogs', rows, errors }

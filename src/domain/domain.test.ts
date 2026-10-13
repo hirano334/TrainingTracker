@@ -8,12 +8,13 @@ import { judge, judgeClass, judgeDrop, judgePace, requiredGain, upperRoutePace }
 import { findPhasePairs, phaseAt, targetWeightOn } from './phases'
 import { sampleData } from './sample'
 import { weeklySeries } from './series'
-import type { Cycle, DailyLog, Lift, Phase, Settings, TopSet } from './types'
+import { resolveCycle, type ResolvedCycle } from './cycles'
+import type { DailyLog, Lift, Phase, Settings, TopSet } from './types'
 import { addDays, diffDays, weekStart } from './weeks'
 import { avgWeightInWindow, latestPace, pacePerMonth, weeklyWeights } from './weight'
 
 const S: Settings = { ...EXAMPLE_SETTINGS }
-const CYCLE: Cycle = { ...EXAMPLE_CYCLES[0], baseTotal: 470 }
+const CYCLE = resolveCycle({ ...EXAMPLE_CYCLES[0], baseTotal: 470 }, EXAMPLE_PHASES) as ResolvedCycle
 const phase = (id: string) => EXAMPLE_PHASES.find((p) => p.id === id) as Phase
 
 const log = (date: string, weight: number, bodyFatPct: number | null = null): DailyLog => ({

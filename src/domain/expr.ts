@@ -14,6 +14,46 @@ export type Compiled = (vars: Vars) => number
 
 export const MAX_EXPR_LENGTH = 200
 
+/**
+ * Tuchscherer（Reactive Training Systems）の RPE 換算表。
+ * 実効回数 r（回数 + 残り回数）で扱える重量が、1RM の何割かを返す。
+ * 表は r = 1, 1.5, 2, … の値で、あいだは直線でつなぐ。表の外は端の値。
+ */
+const RTS_TABLE: [number, number][] = [
+  [1, 1.0],
+  [1.5, 0.978],
+  [2, 0.955],
+  [2.5, 0.939],
+  [3, 0.922],
+  [3.5, 0.907],
+  [4, 0.892],
+  [4.5, 0.878],
+  [5, 0.863],
+  [5.5, 0.85],
+  [6, 0.837],
+  [6.5, 0.824],
+  [7, 0.811],
+  [7.5, 0.799],
+  [8, 0.786],
+  [8.5, 0.774],
+  [9, 0.762],
+  [10, 0.739],
+  [11, 0.707],
+  [12, 0.68],
+]
+
+export function rtsFraction(r: number): number {
+  if (!(r > RTS_TABLE[0][0])) return RTS_TABLE[0][1]
+  for (let i = 1; i < RTS_TABLE.length; i++) {
+    const [x1, y1] = RTS_TABLE[i]
+    if (r <= x1) {
+      const [x0, y0] = RTS_TABLE[i - 1]
+      return y0 + ((y1 - y0) * (r - x0)) / (x1 - x0)
+    }
+  }
+  return RTS_TABLE[RTS_TABLE.length - 1][1]
+}
+
 /** 名前 → [引数の数（null は1個以上いくつでも）, 実装] */
 const FUNCTIONS = new Map<string, [number | null, (...a: number[]) => number]>([
   ['exp', [1, Math.exp]],
@@ -24,6 +64,7 @@ const FUNCTIONS = new Map<string, [number | null, (...a: number[]) => number]>([
   ['pow', [2, Math.pow]],
   ['min', [null, Math.min]],
   ['max', [null, Math.max]],
+  ['rts', [1, rtsFraction]],
 ])
 
 export const FUNCTION_NAMES = [...FUNCTIONS.keys()]

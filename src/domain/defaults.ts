@@ -26,7 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
   allometricExponent: 2 / 3,
   maintenanceKcal: null,
   kcalPerKg: 7700,
-  e1rmFormulaId: 'epley',
+  e1rmFormulaId: 'rts',
   customFormulas: [],
   borderlineFactor: 0.5,
   dropNormalMaxPct: 2,
@@ -35,7 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bulkPaceMinPerMonth: 1.0,
   cutPaceMaxPerMonth: 2.0,
   e1rmDropAlertPct: 5,
-  show: { waist: true, nutrition: true, bodyFat: true, checkpoint: true },
+  show: { waist: true, nutrition: true, bodyFat: true, checkpoint: true, heartRate: false },
 }
 
 /** 5.4 の係数。本命大会の日付が分からないときの値（残り約2.5サイクルで伸びが 1 : 0.8 : 0.7 と鈍る仮定） */
@@ -79,6 +79,8 @@ export function normalizeSettings(raw: Partial<Settings> | undefined): Settings 
       : {}
   return {
     ...DEFAULT_SETTINGS,
+    // 式を選べるようになる前の記録は Epley で計算していた。初期値が変わっても、既存の人の数字は動かさない
+    e1rmFormulaId: 'epley',
     ...legacy,
     ...raw,
     show: { ...DEFAULT_SETTINGS.show, ...raw.show },

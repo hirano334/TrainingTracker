@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
 import { computeAlerts } from '../../domain/alerts'
 import { judge } from '../../domain/judgement'
+import { summarizeCycle } from '../../domain/summary'
 import { addDays, todayISO } from '../../domain/weeks'
 import type { Data } from '../useData'
 import { ChartSet } from './Charts'
+import { SummaryCard } from './Cycle'
 import { JudgementCards, statusLabel } from './Judgement'
 
 /**
@@ -56,11 +58,26 @@ export function Report({ data, cycleId, close }: { data: Data; cycleId: string; 
         <span className="badge">{statusLabel(j)}</span>
       </div>
       <div className="card sub">
-        基準日 {cycle.baseDate}（{cycle.baseWeight}kg）→ 増量終了 {cycle.bulkEndDate} → 減量終了 {cycle.cutEndDate}
+        {cycle.phases.map((p) => p.name).join(' → ')}／基準日 {cycle.baseDate}（{cycle.baseWeight}kg）〜 {cycle.endDate}
         <div>作成日 {today}</div>
       </div>
 
+      <SummaryCard sum={summarizeCycle(s, cycle, data, today)} data={data} />
       <JudgementCards j={j} data={data} />
+      {(cycle.memo !== '' || cycle.nextNote !== '') && (
+        <div className="card">
+          <h2>振り返り</h2>
+          {cycle.memo !== '' && <div style={{ whiteSpace: 'pre-wrap' }}>{cycle.memo}</div>}
+          {cycle.nextNote !== '' && (
+            <>
+              <div className="sub" style={{ marginTop: 8 }}>
+                次のサイクルで変えること
+              </div>
+              <div style={{ whiteSpace: 'pre-wrap' }}>{cycle.nextNote}</div>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <h2>計算の前提</h2>

@@ -14,8 +14,11 @@ export const FORMULA_VARS = ['w', 'reps', 'rpe', 'rir', 'r'] as const
 
 /** 組み込みの式。どれも限界まで挙げた場合の回数として r（回数 + RIR）を使う */
 export const BUILTIN_FORMULAS: Formula[] = [
-  // 要件定義 5.2 の式
+  // 要件定義 5.2 の式。フォールバックにも使うので先頭に置く
   { id: 'epley', name: 'Epley', expr: 'w * (1 + r / 30)' },
+  // RPE を使う人に広く使われている換算表。1回・RPE10 でちょうど実重量になる
+  { id: 'rts', name: 'RTS の表', expr: 'w / rts(r)' },
+  { id: 'epley3', name: 'Epley（1回3%）', expr: 'w * (1 + 0.03 * r)' },
   { id: 'brzycki', name: 'Brzycki', expr: 'w * 36 / (37 - r)' },
   { id: 'lombardi', name: 'Lombardi', expr: 'w * r ^ 0.10' },
   { id: 'oconner', name: "O'Conner", expr: 'w * (1 + r / 40)' },

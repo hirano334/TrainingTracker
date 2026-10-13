@@ -90,7 +90,7 @@ function CsvImport({ toast }: { toast: (m: string) => void }) {
         <div className="muted" style={{ marginTop: 4 }}>
           1行目は見出し。このアプリが書き出す CSV はそのまま読めます。
           <br />
-          体重：<code>date, weight, bodyfat, kcal, protein</code>（date と weight が必須）
+          体重：<code>date, weight, bodyfat, kcal, protein, hr</code>（date と weight が必須）
           <br />
           トップセット：<code>date, lift, weight, reps, rpe, comp, memo</code>（lift は SQ / BP / DL、reps は1〜5、rpe
           は6〜10、comp は ○ か ×。空欄は ○）

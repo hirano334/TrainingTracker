@@ -14,6 +14,7 @@ const SHOW_LABELS: [keyof ShowFlags, string][] = [
   ['bodyFat', '体脂肪率'],
   ['nutrition', 'カロリー・タンパク質'],
   ['checkpoint', 'チェックポイント測定（実測MAXなど）'],
+  ['heartRate', '睡眠時平均心拍数'],
 ]
 
 const parseList = (t: string) =>

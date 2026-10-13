@@ -3,20 +3,20 @@ import { initSync } from './sync/syncEngine'
 import { Charts } from './ui/pages/Charts'
 import { Home } from './ui/pages/Home'
 import { Input } from './ui/pages/Input'
-import { Judgement } from './ui/pages/Judgement'
+import { Cycle } from './ui/pages/Cycle'
 import { Report } from './ui/pages/Report'
 import { Settings } from './ui/pages/Settings'
 import { Setup } from './ui/pages/Setup'
 import { useData, useSetupDone } from './ui/useData'
 
-const TABS = ['ホーム', '入力', 'グラフ', '判定', '設定'] as const
+const TABS = ['ホーム', '入力', 'グラフ', 'サイクル', '設定'] as const
 type Tab = (typeof TABS)[number]
 
 const ICONS: Record<Tab, ReactNode> = {
   ホーム: <path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z" />,
   入力: <path d="M12 5v14M5 12h14" />,
   グラフ: <path d="M4 19V5M4 19h16M8 15l4-5 3 3 4-6" />,
-  判定: <path d="M12 4v16M6 20h12M5 8h14M5 8l-2.5 6a3 3 0 0 0 5 0zM19 8l-2.5 6a3 3 0 0 0 5 0z" />,
+  サイクル: <path d="M12 4v16M6 20h12M5 8h14M5 8l-2.5 6a3 3 0 0 0 5 0zM19 8l-2.5 6a3 3 0 0 0 5 0z" />,
   設定: (
     <path d="M4 7h10M18 7h2M4 17h2M10 17h10M16 5v4M8 15v4" />
   ),
@@ -60,9 +60,10 @@ export function App() {
             ホーム: <Home data={data} />,
             入力: <Input data={data} toast={toast} />,
             グラフ: <Charts data={data} />,
-            判定: (
-              <Judgement
+            サイクル: (
+              <Cycle
                 data={data}
+                toast={toast}
                 openReport={(id) => {
                   setReport(id)
                   window.scrollTo({ top: 0 })

@@ -100,10 +100,11 @@ export function buildSetup(a: SetupAnswers): SetupPlan {
     cycle: {
       id: 'cycle-1',
       name: '第1サイクル',
-      ...dates,
+      phaseIds: ['bulk-1', 'cut-1'],
       baseWeight: a.weight,
       baseTotal: a.baseTotal,
-      bulkEndDate: bulkEnd,
+      memo: '',
+      nextNote: '',
       requiredPaceFactor: factors?.requiredPaceFactor ?? DEFAULT_CYCLE_FACTORS.requiredPaceFactor,
       projectionMultiplier: factors?.projectionMultiplier ?? DEFAULT_CYCLE_FACTORS.projectionMultiplier,
     },

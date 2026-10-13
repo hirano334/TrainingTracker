@@ -86,6 +86,9 @@ export interface DayRow {
   /** その日までの7日移動平均。記録が少ない日は出さない */
   trend: number | null
   target: number | null
+  /** 睡眠時平均心拍数と、その7日移動平均 */
+  sleepHr: number | null
+  hrTrend: number | null
 }
 
 /** 移動平均を出すのに必要な、7日間のうちの記録日数 */
@@ -93,20 +96,30 @@ export const MIN_DAYS_FOR_TREND = 4
 
 /** 日々の体重と7日移動平均 */
 export function dailySeries(phases: Phase[], logs: DailyLog[], from: ISODate, to: ISODate): DayRow[] {
-  const byDate = new Map<ISODate, number>()
-  for (const l of logs) if (!l.deleted) byDate.set(l.date, l.weight)
-  const out: DayRow[] = []
-  for (let d = from; d <= to; d = addDays(d, 1)) {
+  const weight = new Map<ISODate, number>()
+  const hr = new Map<ISODate, number>()
+  for (const l of logs) {
+    if (l.deleted) continue
+    weight.set(l.date, l.weight)
+    if (l.sleepHr != null) hr.set(l.date, l.sleepHr)
+  }
+  const trendOf = (m: Map<ISODate, number>, d: ISODate) => {
     const window: number[] = []
     for (let i = 0; i < 7; i++) {
-      const w = byDate.get(addDays(d, -i))
-      if (w !== undefined) window.push(w)
+      const v = m.get(addDays(d, -i))
+      if (v !== undefined) window.push(v)
     }
+    return window.length >= MIN_DAYS_FOR_TREND ? window.reduce((a, b) => a + b, 0) / window.length : null
+  }
+  const out: DayRow[] = []
+  for (let d = from; d <= to; d = addDays(d, 1)) {
     out.push({
       date: d,
-      weight: byDate.get(d) ?? null,
-      trend: window.length >= MIN_DAYS_FOR_TREND ? window.reduce((a, b) => a + b, 0) / window.length : null,
+      weight: weight.get(d) ?? null,
+      trend: trendOf(weight, d),
       target: targetWeightAt(phases, d),
+      sleepHr: hr.get(d) ?? null,
+      hrTrend: trendOf(hr, d),
     })
   }
   return out

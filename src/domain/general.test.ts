@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, normalizeSettings } from './defaults'
-import { EXAMPLE_CYCLES, EXAMPLE_SETTINGS } from './example'
+import { EXAMPLE_CYCLES, EXAMPLE_PHASES, EXAMPLE_SETTINGS } from './example'
 import { judge } from './judgement'
 import { phaseAt, targetWeightOn } from './phases'
 import { gainWeight, monthsBetween, suggestFactors } from './planning'
 import { sampleData } from './sample'
 import { buildSetup, type SetupAnswers } from './setup'
-import type { Cycle, Phase } from './types'
+import { resolveCycle, type ResolvedCycle } from './cycles'
+import type { Phase } from './types'
 
-const CYCLE: Cycle = { ...EXAMPLE_CYCLES[0], baseTotal: 470 }
+const CYCLE = resolveCycle({ ...EXAMPLE_CYCLES[0], baseTotal: 470 }, EXAMPLE_PHASES) as ResolvedCycle
 const d = sampleData()
 
 describe('階級の一般化', () => {
@@ -65,7 +66,7 @@ describe('設定の読み替え', () => {
     const s = normalizeSettings({ id: 'settings', updatedAt: 5, goalTotal: 400, show: { waist: false } as never })
     expect(s.goalTotal).toBe(400)
     expect(s.dropNormalMaxPct).toBe(2)
-    expect(s.show).toEqual({ waist: false, nutrition: true, bodyFat: true, checkpoint: true })
+    expect(s.show).toEqual({ waist: false, nutrition: true, bodyFat: true, checkpoint: true, heartRate: false })
   })
   it('今の形の設定には手を加えない', () => {
     expect(normalizeSettings(EXAMPLE_SETTINGS)).toEqual(EXAMPLE_SETTINGS)
@@ -117,7 +118,7 @@ describe('初回セットアップ', () => {
     cutWeeks: 4,
     bulkPerMonth: 1.5,
     cutPerMonth: 1.5,
-    show: { waist: false, nutrition: true, bodyFat: false, checkpoint: true },
+    show: { waist: false, nutrition: true, bodyFat: false, checkpoint: true, heartRate: false },
   }
   const plan = buildSetup(answers)
   const phases = plan.phases.map((p) => ({ ...p, updatedAt: 1 })) as Phase[]
@@ -143,12 +144,11 @@ describe('初回セットアップ', () => {
     expect(cut.kcalOffsetMin).toBeLessThan(0)
   })
   it('サイクルはフェーズと同じ日付で、係数は大会日から', () => {
-    expect(plan.cycle).toMatchObject({
+    expect(plan.cycle).toMatchObject({ phaseIds: ['bulk-1', 'cut-1'], baseWeight: 65, baseTotal: 380 })
+    expect(resolveCycle({ ...plan.cycle, updatedAt: 1 }, phases)).toMatchObject({
       baseDate: '2026-12-27',
-      bulkEndDate: '2027-02-21',
-      cutEndDate: '2027-03-21',
-      baseWeight: 65,
-      baseTotal: 380,
+      endDate: '2027-03-21',
+      dropRefDate: '2027-02-21',
     })
     // 基準日から大会まで 182日 ÷ 84日 ≒ 2.17 サイクル → 1 + 0.8 + 0.17 × 0.7
     expect(plan.cycle.projectionMultiplier).toBeCloseTo(1.92, 2)

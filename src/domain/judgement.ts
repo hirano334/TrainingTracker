@@ -2,7 +2,8 @@ import { adjustedTotal } from './adjust'
 import { checkpointTotals, type Totals } from './e1rm'
 import { resolveFormula } from './formulas'
 import { monthsBetween } from './planning'
-import type { Cycle, DailyLog, ISODate, Settings, TopSet } from './types'
+import type { ResolvedCycle } from './cycles'
+import type { DailyLog, ISODate, Settings, TopSet } from './types'
 import { avgWeightInWindow } from './weight'
 
 export type PaceVerdict = 'inRange' | 'borderline' | 'hard'
@@ -43,10 +44,10 @@ export function upperRoutePace(targetKg: number, weekAvgWeight: number, months: 
 }
 
 export interface Judgement {
-  cycle: Cycle
-  /** 減量終了日以降なら確定、それより前は途中経過 */
+  cycle: ResolvedCycle
+  /** サイクルの終了日以降なら確定、それより前は途中経過 */
   final: boolean
-  /** 計算に使った日（確定なら減量終了日） */
+  /** 計算に使った日（確定ならサイクルの終了日） */
   evalDate: ISODate
   now: Totals
   weekAvgWeight: number | null
@@ -56,6 +57,7 @@ export interface Judgement {
   pace: PaceVerdict | null
   /** 5.4 本命大会時点の予測トータル = 基準トータル + 伸び × 倍率 */
   projection: number | null
+  /** 落ち幅の起点（最後の減量が始まる前日）のトータル */
   atBulkEnd: Totals | null
   drop: number | null
   /** 落ち幅の、増量終了時のトータルに対する割合(%) */
@@ -68,11 +70,11 @@ export interface Judgement {
   upperRoute: { targetKg: number; perMonth: number }[]
 }
 
-/** 申告されたサイクル1件を判定する */
-export function judge(s: Settings, cycle: Cycle, logs: DailyLog[], sets: TopSet[], asOf: ISODate): Judgement {
+/** サイクル1件を判定する */
+export function judge(s: Settings, cycle: ResolvedCycle, logs: DailyLog[], sets: TopSet[], asOf: ISODate): Judgement {
   const fn = resolveFormula(s).fn
-  const final = asOf >= cycle.cutEndDate
-  const evalDate = final ? cycle.cutEndDate : asOf
+  const final = asOf >= cycle.endDate
+  const evalDate = final ? cycle.endDate : asOf
 
   const now = checkpointTotals(sets, evalDate, fn)
   const weekAvgWeight = avgWeightInWindow(logs, evalDate)
@@ -89,8 +91,8 @@ export function judge(s: Settings, cycle: Cycle, logs: DailyLog[], sets: TopSet[
   const projection = gain !== null && base !== null ? base + gain * cycle.projectionMultiplier : null
 
   // 落ち幅は減量期に入ってからでないと意味がない。体重補正はかけない
-  const inCut = evalDate > cycle.bulkEndDate
-  const atBulkEnd = inCut ? checkpointTotals(sets, cycle.bulkEndDate, fn) : null
+  const ref = cycle.dropRefDate
+  const atBulkEnd = ref !== null && evalDate > ref ? checkpointTotals(sets, ref, fn) : null
   const drop =
     atBulkEnd && atBulkEnd.total !== null && now.total !== null ? atBulkEnd.total - now.total : null
   const dropPct =
@@ -134,12 +136,7 @@ export function judge(s: Settings, cycle: Cycle, logs: DailyLog[], sets: TopSet[
   }
 }
 
-/** 基準日の古い順 */
-export function sortCycles(cycles: Cycle[]): Cycle[] {
-  return cycles.filter((c) => !c.deleted).sort((a, b) => a.baseDate.localeCompare(b.baseDate))
-}
-
 /** グラフの体重補正に使う基準体重：最初のサイクルの基準体重 */
-export function referenceWeight(s: Settings, cycles: Cycle[]): number {
-  return sortCycles(cycles)[0]?.baseWeight ?? s.baseWeight
+export function referenceWeight(s: Settings, cycles: ResolvedCycle[]): number {
+  return cycles[0]?.baseWeight ?? s.baseWeight
 }

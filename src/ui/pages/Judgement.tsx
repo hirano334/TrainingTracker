@@ -1,25 +1,18 @@
-import { useMemo, useState } from 'react'
 import type { Totals } from '../../domain/e1rm'
-import {
-  judge,
-  type ClassVerdict,
-  type DropVerdict,
-  type Judgement as J,
-  type PaceVerdict,
-} from '../../domain/judgement'
+import type { ClassVerdict, DropVerdict, Judgement as J, PaceVerdict } from '../../domain/judgement'
 import type { Checkpoint, Settings } from '../../domain/types'
-import { addDays, shortDate, todayISO } from '../../domain/weeks'
+import { addDays, shortDate } from '../../domain/weeks'
 import { f1, signed } from '../format'
 import type { Data } from '../useData'
 
 type Tone = 'good' | 'warning' | 'serious' | 'critical'
 
-const PACE: Record<PaceVerdict, { label: string; tone: Tone }> = {
+export const PACE: Record<PaceVerdict, { label: string; tone: Tone }> = {
   inRange: { label: '射程圏', tone: 'good' },
   borderline: { label: '境界', tone: 'warning' },
   hard: { label: '厳しい', tone: 'critical' },
 }
-const DROP: Record<DropVerdict, { label: string; short: string; tone: Tone }> = {
+export const DROP: Record<DropVerdict, { label: string; short: string; tone: Tone }> = {
   normal: { label: '正常（体重減の分だけ落ちた）', short: '正常', tone: 'good' },
   grey: { label: 'グレー', short: 'グレー', tone: 'warning' },
   large: { label: '減量で重量を失いやすい', short: '落ちやすい', tone: 'serious' },
@@ -42,7 +35,7 @@ export function classLabel(v: ClassVerdict, s: Settings): string {
       return `${s.lowerClassName}を推奨（追加の増量コストがかからない）`
   }
 }
-const classShort = (v: ClassVerdict, s: Settings) =>
+export const classShort = (v: ClassVerdict, s: Settings) =>
   ({
     either: 'どちらも可',
     recommendUpper: s.upperClassName,
@@ -63,7 +56,7 @@ function Badge({ v }: { v: { label: string; tone: Tone } | null }) {
 const lifts = (t: Totals | null) => (t ? `SQ ${f1(t.SQ)} / BP ${f1(t.BP)} / DL ${f1(t.DL)}` : '—')
 
 export const statusLabel = (j: J) =>
-  j.final ? `確定（${shortDate(j.cycle.cutEndDate)}）` : `暫定（${shortDate(j.evalDate)}時点）`
+  j.final ? `確定（${shortDate(j.cycle.endDate)}）` : `暫定（${shortDate(j.evalDate)}時点）`
 
 /** 1サイクルぶんの判定の表示。判定画面とレポートで共用 */
 export function JudgementCards({ j, data }: { j: J; data: Data }) {
@@ -71,7 +64,7 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
   const c = j.cycle
   // 判定日の前後1週間の測定記録を、実測MAXとして並べる
   const measured: Checkpoint | undefined = data.checkpoints
-    .filter((x) => x.date >= addDays(c.cutEndDate, -7) && x.date <= addDays(c.cutEndDate, 7))
+    .filter((x) => x.date >= addDays(c.endDate, -7) && x.date <= addDays(c.endDate, 7))
     .at(-1)
   const measuredTotal =
     measured && measured.maxSQ !== null && measured.maxBP !== null && measured.maxDL !== null
@@ -88,14 +81,16 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
           </div>
         </div>
       )}
-      {(j.pace === null || j.dropVerdict === null) && (
+      {(j.pace === null || (c.dropRefDate !== null && j.dropVerdict === null)) && (
         <div className="card sub">
           <b style={{ color: 'var(--text)' }}>判定に足りないもの</b>
           {s.goalTotal === null && <div>・目標トータルが未入力（設定のパラメータ）</div>}
           {c.baseTotal === null && <div>・基準トータルが未入力（設定のサイクル）</div>}
           {j.now.total === null && <div>・直近2週に SQ・BP・DL の試合基準のセットが必要</div>}
           {j.weekAvgWeight === null && <div>・直近7日の体重が必要</div>}
-          {j.drop === null && j.now.total !== null && <div>・落ち幅は減量期に入ってから計算</div>}
+          {c.dropRefDate !== null && j.drop === null && j.now.total !== null && (
+            <div>・落ち幅は減量期に入ってから計算</div>
+          )}
         </div>
       )}
 
@@ -167,6 +162,7 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
         </table>
       </div>
 
+      {c.dropRefDate !== null && (
       <div className="card">
         <div className="row between wrap">
           <h2 style={{ margin: 0 }}>判定② 減量による落ち幅</h2>
@@ -176,7 +172,7 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
           <tbody>
             <tr>
               <th>
-                トータルe1RM（{shortDate(c.bulkEndDate)}）
+                トータルe1RM（{c.dropRefDate ? shortDate(c.dropRefDate) : '—'}）
                 <div className="muted">{lifts(j.atBulkEnd)}</div>
               </th>
               <td>{f1(j.atBulkEnd?.total)} kg</td>
@@ -189,7 +185,7 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
               <th>
                 落ち幅
                 <div className="muted">
-                  体重補正なし。{shortDate(c.bulkEndDate)}のトータルの {s.dropNormalMaxPct}% まで正常／{s.dropGreyMaxPct}%
+                  体重補正なし。減量前のトータルの {s.dropNormalMaxPct}% まで正常／{s.dropGreyMaxPct}%
                   までグレー
                 </div>
               </th>
@@ -201,6 +197,7 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
           </tbody>
         </table>
       </div>
+      )}
 
       {s.classChoice && (
         <div className="card">
@@ -233,108 +230,6 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
           )}
         </div>
       )}
-    </>
-  )
-}
-
-/** サイクル同士の比較 */
-function Compare({ all, s }: { all: J[]; s: Settings }) {
-  return (
-    <div className="card">
-      <h2>サイクルの比較</h2>
-      <div className="scroll-x">
-        <table className="data">
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left' }}>サイクル</th>
-              <th>伸び</th>
-              <th>必要</th>
-              <th>判定①</th>
-              <th>落ち幅</th>
-              <th>判定②</th>
-              {s.classChoice && <th>階級</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {all.map((j) => (
-              <tr key={j.cycle.id}>
-                <td style={{ textAlign: 'left' }}>
-                  {j.cycle.name}
-                  {!j.final && '（暫定）'}
-                </td>
-                <td>{signed(j.gain)}</td>
-                <td>{signed(j.required)}</td>
-                <td>{j.pace ? PACE[j.pace].label : '—'}</td>
-                <td>{f1(j.drop)}</td>
-                <td>{j.dropVerdict ? DROP[j.dropVerdict].short : '—'}</td>
-                {s.classChoice && <td>{j.classVerdict ? classShort(j.classVerdict, s) : '—'}</td>}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-export function Judgement({ data, openReport }: { data: Data; openReport: (cycleId: string) => void }) {
-  const today = todayISO()
-  const all = useMemo(
-    () => data.cycles.map((c) => judge(data.settings, c, data.dailyLogs, data.topSets, today)),
-    [data, today],
-  )
-  // 最初は、今日を含むサイクル（無ければ最後に始まったもの）
-  const [picked, setPicked] = useState<string | null>(null)
-  const current =
-    all.find((j) => j.cycle.id === picked) ??
-    all.find((j) => j.cycle.baseDate <= today && today <= j.cycle.cutEndDate) ??
-    all.filter((j) => j.cycle.baseDate <= today).at(-1) ??
-    all[0]
-
-  if (!current) {
-    return (
-      <>
-        <div className="page-head">
-          <h1>判定</h1>
-        </div>
-        <div className="card sub">判定するサイクルがありません。設定の「サイクル」で、基準日・増量終了日・減量終了日を申告してください。</div>
-      </>
-    )
-  }
-
-  const c = current.cycle
-  return (
-    <>
-      <div className="page-head">
-        <h1>判定</h1>
-        <span className="badge">{statusLabel(current)}</span>
-      </div>
-
-      {all.length > 1 && (
-        <label className="field" style={{ marginBottom: 12 }}>
-          <span>サイクル</span>
-          <select value={c.id} onChange={(e) => setPicked(e.target.value)}>
-            {all.map((j) => (
-              <option key={j.cycle.id} value={j.cycle.id}>
-                {j.cycle.name}（{j.cycle.baseDate}〜{j.cycle.cutEndDate}）
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      <div className="card sub">
-        <b style={{ color: 'var(--text)' }}>{c.name}</b>　基準 {shortDate(c.baseDate)} → 増量終了 {shortDate(c.bulkEndDate)} →
-        減量終了 {shortDate(c.cutEndDate)}／{data.formula.formula.name}式
-        {!current.final && <div>減量終了日に確定します。それまでは今日までの記録で計算した途中経過です。</div>}
-      </div>
-
-      <JudgementCards j={current} data={data} />
-      {all.length > 1 && <Compare all={all} s={data.settings} />}
-
-      <button type="button" className="btn" style={{ width: '100%' }} onClick={() => openReport(c.id)}>
-        レポートを開く（印刷・PDF）
-      </button>
     </>
   )
 }
