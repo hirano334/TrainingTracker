@@ -3,8 +3,9 @@ import Dexie from 'dexie'
 import { describe, expect, it } from 'vitest'
 import { dailyLogsCSV, topSetsCSV } from '../db/backup'
 import { applyImport, parseCSV, parseImport } from '../db/csvImport'
-import { put, readAll, TrackerDB } from '../db/db'
-import { DEFAULT_CYCLES, DEFAULT_PHASES, DEFAULT_SETTINGS } from './defaults'
+import { getMeta, put, readAll, SETUP_DONE, TrackerDB } from '../db/db'
+import { EXAMPLE_CYCLES, EXAMPLE_PHASES, EXAMPLE_SETTINGS } from './example'
+import { normalizeSettings } from './defaults'
 import { estimateMaintenance } from './energy'
 import { epley } from './formulas'
 import { judge } from './judgement'
@@ -15,8 +16,8 @@ import { dailySeries } from './series'
 import type { Cycle, DailyLog, Lift, Settings, TopSet } from './types'
 import { addDays } from './weeks'
 
-const S: Settings = { ...DEFAULT_SETTINGS }
-const CYCLE: Cycle = { ...DEFAULT_CYCLES[0], baseTotal: 470 }
+const S: Settings = { ...EXAMPLE_SETTINGS }
+const CYCLE: Cycle = { ...EXAMPLE_CYCLES[0], baseTotal: 470 }
 const log = (date: string, weight: number, kcal: number | null = null): DailyLog => ({
   date,
   weight,
@@ -88,15 +89,26 @@ describe('サイクルの申告', () => {
       checkpoints: 'date',
       meta: 'key',
     })
-    await v1.table('settings').add({
-      ...DEFAULT_SETTINGS,
+    // 74kg級/83kg級が固定だった頃の設定の形
+    const legacy = {
+      id: 'settings',
       updatedAt: 123,
+      heightCm: 178,
+      baseDate: '2026-11-30',
       baseWeight: 72.8,
       baseTotal: 468,
+      standard74: 545,
+      standard83: 575,
+      mainMeetDate: '2027-10-01',
+      route83TargetsKg: [81, 82],
+      route83Months: 7,
+      dropNormalMaxKg: 10,
+      dropGreyMaxKg: 15,
       requiredPaceFactor: 0.45,
       projectionMultiplier: 2.5,
-    })
-    await v1.table('phases').bulkAdd(DEFAULT_PHASES)
+    }
+    await v1.table('settings').add(legacy)
+    await v1.table('phases').bulkAdd(EXAMPLE_PHASES)
     v1.close()
 
     const d = new TrackerDB(name)
@@ -111,6 +123,23 @@ describe('サイクルの申告', () => {
       bulkEndDate: '2027-01-31',
       cutEndDate: '2027-02-28',
       requiredPaceFactor: 0.45,
+    })
+    // 計画が入っているデータベースなので、初回セットアップは出さない
+    expect(await getMeta(SETUP_DONE, d)).toBe(true)
+    // 設定は読み出すときに今の形へ読み替える
+    const s = normalizeSettings((await readAll(d)).settings[0])
+    expect(s).toMatchObject({
+      goalTotal: 545,
+      classChoice: true,
+      lowerClassName: '74kg級',
+      upperClassName: '83kg級',
+      upperClassStandard: 575,
+      upperLandingTargetsKg: [81, 82],
+      upperRouteMonths: 7,
+      dropNormalMaxPct: 2,
+      dropGreyMaxPct: 3,
+      mainMeetDate: '2027-10-01',
+      show: { waist: true, nutrition: true, bodyFat: true, checkpoint: true },
     })
   })
 })
@@ -140,7 +169,7 @@ describe('維持カロリーの推定', () => {
 describe('体重トレンド', () => {
   it('7日移動平均。記録が4日未満の日は出さない', () => {
     const logs = [0, 1, 2, 3, 4, 5, 6].map((i) => log(addDays('2026-12-01', i), 73 + i * 0.1))
-    const rows = dailySeries(DEFAULT_PHASES, logs, '2026-12-01', '2026-12-08')
+    const rows = dailySeries(EXAMPLE_PHASES, logs, '2026-12-01', '2026-12-08')
     expect(rows[2].trend).toBeNull()
     expect(rows[3].trend).toBeCloseTo(73.15)
     expect(rows[6].trend).toBeCloseTo(73.3)
@@ -192,7 +221,7 @@ describe('自己ベスト', () => {
 
 describe('結果の書き出し', () => {
   const d = sampleData()
-  const input = { settings: S, phases: DEFAULT_PHASES, cycles: [CYCLE], ...d }
+  const input = { settings: S, phases: EXAMPLE_PHASES, cycles: [CYCLE], ...d }
   it('使った式・週次の値・判定がそろう', () => {
     const r = buildResults(input, '2027-02-28', new Date('2027-02-28T01:00:00Z'))
     expect(r.formula).toMatchObject({ id: 'epley', expr: 'w * (1 + r / 30)', fallbackReason: null })

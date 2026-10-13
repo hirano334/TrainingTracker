@@ -22,6 +22,7 @@ interface FormProps {
 
 export function Input({ data, toast }: FormProps) {
   const today = todayISO()
+  const show = data.settings.show
   // 朝はまず体重。今日の体重が入っていればトレーニングから
   const [kind, setKind] = useState<Kind>(() =>
     data.dailyLogs.some((l) => l.date === today) ? 'トレ' : '体重',
@@ -31,7 +32,13 @@ export function Input({ data, toast }: FormProps) {
       <div className="page-head">
         <h1>入力</h1>
       </div>
-      <Seg options={KINDS} value={kind} onChange={setKind} label="入力する項目" className="top" />
+      <Seg
+        options={KINDS.filter((k) => (k !== 'ウエスト' || show.waist) && (k !== '測定' || show.checkpoint))}
+        value={kind}
+        onChange={setKind}
+        label="入力する項目"
+        className="top"
+      />
       {kind === '体重' && <WeightForm data={data} toast={toast} />}
       {kind === 'トレ' && <SetForm data={data} toast={toast} />}
       {kind === 'ウエスト' && <WaistForm data={data} toast={toast} />}
@@ -79,6 +86,7 @@ function Recent<T>(props: {
 }
 
 function WeightForm({ data, toast }: FormProps) {
+  const show = data.settings.show
   const [date, setDate] = useState(todayISO())
   const existing = data.dailyLogs.find((l) => l.date === date)
   const last = data.dailyLogs.filter((l) => l.date < date).at(-1)
@@ -110,16 +118,24 @@ function WeightForm({ data, toast }: FormProps) {
           <span className="label">体重（起床後・排尿後）kg{existing ? '　※この日は入力済み' : ''}</span>
           <Stepper label="体重" value={weight} onChange={setWeight} step={0.1} />
         </div>
-        <details open={bodyFatPct !== null || kcal !== null || proteinG !== null || undefined}>
-          <summary>体脂肪率・カロリー・タンパク質（任意）</summary>
-          <div className="stack" style={{ marginTop: 8 }}>
-            <NumField label="体脂肪率 %（体重計の表示値）" value={bodyFatPct} onChange={setBodyFat} />
-            <div className="grid2">
-              <NumField label="摂取カロリー kcal" value={kcal} onChange={setKcal} />
-              <NumField label="タンパク質 g" value={proteinG} onChange={setProtein} />
+        {(show.bodyFat || show.nutrition) && (
+          <details open={bodyFatPct !== null || kcal !== null || proteinG !== null || undefined}>
+            <summary>
+              {[show.bodyFat && '体脂肪率', show.nutrition && 'カロリー・タンパク質'].filter(Boolean).join('・')}（任意）
+            </summary>
+            <div className="stack" style={{ marginTop: 8 }}>
+              {show.bodyFat && (
+                <NumField label="体脂肪率 %（体重計の表示値）" value={bodyFatPct} onChange={setBodyFat} />
+              )}
+              {show.nutrition && (
+                <div className="grid2">
+                  <NumField label="摂取カロリー kcal" value={kcal} onChange={setKcal} />
+                  <NumField label="タンパク質 g" value={proteinG} onChange={setProtein} />
+                </div>
+              )}
             </div>
-          </div>
-        </details>
+          </details>
+        )}
         <button type="button" className="btn primary" onClick={save} disabled={weight === null || weight <= 0}>
           保存
         </button>
@@ -370,7 +386,7 @@ function CheckpointForm({ data, toast }: FormProps) {
     <>
       <div className="card stack">
         <div className="sub">
-          チェックポイント（11月末・1月末・2月末）の測定日に入力する。MAXを測る場合は、同じ曜日・同じ時間帯・試合基準の動作で。
+          サイクルの節目（基準日・増量終了日・減量終了日）の測定日に入力する。MAXを測る場合は、同じ曜日・同じ時間帯・試合基準の動作で。
           判定には直近2週の推定1RMを使い、ここの実測MAXは並べて表示する。
         </div>
         <DateField label="測定日" value={date} onChange={(v) => v && setDate(v)} />

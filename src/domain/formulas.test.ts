@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from './defaults'
+import { EXAMPLE_SETTINGS } from './example'
 import { compile, ExprError } from './expr'
 import { BUILTIN_FORMULAS, compileFormula, epley, resolveFormula, validateFormula } from './formulas'
 
@@ -83,23 +83,23 @@ describe('e1RM の式', () => {
     expect(validateFormula('w * foo')).toMatch(/foo/)
   })
   it('設定で選んだ式を使う', () => {
-    const r = resolveFormula({ ...DEFAULT_SETTINGS, e1rmFormulaId: 'brzycki' })
+    const r = resolveFormula({ ...EXAMPLE_SETTINGS, e1rmFormulaId: 'brzycki' })
     expect(r.formula.name).toBe('Brzycki')
     expect(r.fallbackReason).toBeNull()
     expect(r.fn(100, 3, 8)).toBeCloseTo(112.5)
   })
   it('独自の式を使える', () => {
     const custom = { id: 'c1', name: '自作', expr: 'w * (1 + r / 33)' }
-    const r = resolveFormula({ ...DEFAULT_SETTINGS, customFormulas: [custom], e1rmFormulaId: 'c1' })
+    const r = resolveFormula({ ...EXAMPLE_SETTINGS, customFormulas: [custom], e1rmFormulaId: 'c1' })
     expect(r.fallbackReason).toBeNull()
     expect(r.fn(99, 3, 10)).toBeCloseTo(108)
   })
   it('壊れた式・消えた式は Epley に戻す', () => {
     const broken = { id: 'c1', name: '壊れ', expr: 'w * (' }
-    const a = resolveFormula({ ...DEFAULT_SETTINGS, customFormulas: [broken], e1rmFormulaId: 'c1' })
+    const a = resolveFormula({ ...EXAMPLE_SETTINGS, customFormulas: [broken], e1rmFormulaId: 'c1' })
     expect(a.formula.id).toBe('epley')
     expect(a.fallbackReason).toMatch(/壊れ/)
-    const b = resolveFormula({ ...DEFAULT_SETTINGS, e1rmFormulaId: 'gone' })
+    const b = resolveFormula({ ...EXAMPLE_SETTINGS, e1rmFormulaId: 'gone' })
     expect(b.fn(100, 3, 8)).toBeCloseTo(epley(100, 3, 8))
     expect(b.fallbackReason).not.toBeNull()
   })

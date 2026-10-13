@@ -49,13 +49,18 @@ export function Home({ data }: { data: Data }) {
     const rows = weeklySeries(s, data.refWeight, phases, dailyLogs, topSets, waistLogs, addDays(today, -21), today)
     return {
       phase,
+      // まだ始まっていない、いちばん近いフェーズ
+      next:
+        phases
+          .filter((p) => p.kind !== 'checkpoint' && p.startDate !== null && p.startDate > today)
+          .sort((x, y) => (x.startDate as string).localeCompare(y.startDate as string))[0] ?? null,
       week,
       target,
       pace: latestPace(dailyLogs, today),
       strength: rows.filter((r) => r.total !== null).at(-1) ?? null,
       alerts: computeAlerts(s, phases, dailyLogs, topSets, today),
       weighedToday: dailyLogs.some((l) => l.date === today),
-      waistThisWeek: waistLogs.some((l) => weekStart(l.date) === weekStart(today)),
+      waistThisWeek: !s.show.waist || waistLogs.some((l) => weekStart(l.date) === weekStart(today)),
     }
   }, [data, today])
 
@@ -89,6 +94,7 @@ export function Home({ data }: { data: Data }) {
               {phaseTarget !== null && `　目標 ${f1(phaseTarget)}kg`}
               {phase.paceNote && `（${phase.paceNote}）`}
             </div>
+            {s.show.nutrition && (
             <div className="sub">
               カロリー目安：
               {kcal
@@ -97,9 +103,14 @@ export function Home({ data }: { data: Data }) {
                   ? `維持${signed(phase.kcalOffsetMin, 0)}〜${f0(Math.abs(phase.kcalOffsetMax ?? 0))}（維持カロリー未入力）`
                   : '—'}
             </div>
+            )}
           </>
         ) : (
-          <div className="sub">今日に当たるフェーズがありません。設定のフェーズ表に行を追加してください。</div>
+          <div className="sub">
+            {v.next
+              ? `次のフェーズ：${v.next.name}（${shortDate(v.next.startDate as string)}〜${shortDate(v.next.endDate)}）`
+              : '今日に当たるフェーズがありません。設定のフェーズ表に行を追加してください。'}
+          </div>
         )}
       </div>
 

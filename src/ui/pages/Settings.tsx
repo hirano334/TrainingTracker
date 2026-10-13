@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { newId, put, remove } from '../../db/db'
 import { estimateMaintenance } from '../../domain/energy'
-import type { Phase, PhaseKind, Settings as SettingsT } from '../../domain/types'
+import type { Phase, PhaseKind, Settings as SettingsT, ShowFlags } from '../../domain/types'
 import { addDays, todayISO } from '../../domain/weeks'
 import { FILE_NAME } from '../../sync/drive'
 import { disableSync, enableSync, getClientId, syncNow } from '../../sync/syncEngine'
@@ -32,6 +32,13 @@ export function Settings({ data, toast }: Props) {
     </>
   )
 }
+
+const SHOW_LABELS: [keyof ShowFlags, string, string][] = [
+  ['waist', 'ウエスト周径', '週1回の測定'],
+  ['bodyFat', '体脂肪率', '体重計の表示値と、上限超過の警告'],
+  ['nutrition', 'カロリー・タンパク質', '摂取量の記録、維持カロリー、カロリー目安'],
+  ['checkpoint', 'チェックポイント測定', '実測MAX・睡眠時間・疲労度'],
+]
 
 const ESTIMATE_DAYS = [14, 21, 28] as const
 
@@ -79,6 +86,9 @@ function Params({ data, toast }: Props) {
     if (v !== null) setD((p) => ({ ...p, [k]: v }))
   }
   const dirty = JSON.stringify(d) !== JSON.stringify(data.settings)
+  // 着地目標は「81, 82」のように打つ途中の文字も保ちたいので、文字列でも持つ
+  const [landing, setLanding] = useState(data.settings.upperLandingTargetsKg.join(', '))
+  useEffect(() => setLanding(data.settings.upperLandingTargetsKg.join(', ')), [data.settings.upperLandingTargetsKg])
 
   const save = async () => {
     await put('settings', d)
@@ -88,52 +98,125 @@ function Params({ data, toast }: Props) {
   return (
     <div className="card stack">
       <h2>パラメータ</h2>
-      <div className="grid2">
-        <NumField label="74kg級 標準 kg" value={d.standard74} onChange={num('standard74')} />
-        <NumField label="83kg級 標準 kg" value={d.standard83} onChange={num('standard83')} />
-        <DateField label="本命大会（仮）" value={d.mainMeetDate} onChange={(v) => set('mainMeetDate', v)} />
-        <DateField label="春の大会" value={d.springMeetDate} onChange={(v) => set('springMeetDate', v)} />
-        <NumField label="身長 cm" value={d.heightCm} onChange={num('heightCm')} />
-        <NumField label="体脂肪率の上限 %" value={d.bodyFatLimitPct} onChange={num('bodyFatLimitPct')} />
-      </div>
       <div>
         <NumField
-          label="維持カロリー kcal"
-          value={d.maintenanceKcal}
-          onChange={(v) => set('maintenanceKcal', v)}
+          label={d.classChoice ? `目標トータル kg（${d.lowerClassName}の標準記録など）` : '目標トータル kg（標準記録など）'}
+          value={d.goalTotal}
+          onChange={(v) => set('goalTotal', v)}
           placeholder="未定"
         />
-        <MaintenanceEstimate data={data} kcalPerKg={d.kcalPerKg} onUse={(kcal) => set('maintenanceKcal', kcal)} />
+        <div className="muted">判定①は、このトータルに届くペースで伸びているかを見ます。</div>
       </div>
+      <div className="grid2">
+        <DateField label="本命大会" value={d.mainMeetDate} onChange={(v) => set('mainMeetDate', v)} />
+        <DateField label="春の大会など（任意）" value={d.springMeetDate} onChange={(v) => set('springMeetDate', v)} />
+      </div>
+
+      <label className="toggle">
+        <span>
+          階級の判定を使う
+          <span className="muted" style={{ display: 'block' }}>
+            いまの階級に残るか、上の階級に上げるかを迷っている場合
+          </span>
+        </span>
+        <input type="checkbox" checked={d.classChoice} onChange={(e) => set('classChoice', e.target.checked)} />
+      </label>
+      {d.classChoice && (
+        <div className="stack">
+          <div className="grid2">
+            <TextField label="いまの階級" value={d.lowerClassName} onChange={(v) => set('lowerClassName', v)} placeholder="74kg級" />
+            <TextField label="上の階級" value={d.upperClassName} onChange={(v) => set('upperClassName', v)} placeholder="83kg級" />
+            <NumField
+              label="上の階級の標準記録 kg"
+              value={d.upperClassStandard}
+              onChange={(v) => set('upperClassStandard', v)}
+              placeholder="任意"
+            />
+            <TextField
+              label="上げる場合の着地目標 kg"
+              value={landing}
+              onChange={(t) => {
+                setLanding(t)
+                set(
+                  'upperLandingTargetsKg',
+                  t
+                    .split(/[,、\s]+/)
+                    .map(Number)
+                    .filter((n) => Number.isFinite(n) && n > 0),
+                )
+              }}
+              placeholder="81, 82"
+            />
+          </div>
+          <div>
+            <NumField
+              label="上げるのに使える月数"
+              value={d.upperRouteMonths}
+              onChange={(v) => set('upperRouteMonths', v)}
+              placeholder="空欄なら本命大会までの月数"
+            />
+          </div>
+          <TextField
+            label="「どちらも可」のときの判断材料（任意）"
+            value={d.classNote}
+            onChange={(v) => set('classNote', v)}
+            placeholder="例：下の階級は体脂肪11〜12%を維持"
+          />
+        </div>
+      )}
+
+      {d.show.nutrition && (
+        <div>
+          <NumField
+            label="維持カロリー kcal"
+            value={d.maintenanceKcal}
+            onChange={(v) => set('maintenanceKcal', v)}
+            placeholder="未定"
+          />
+          <MaintenanceEstimate data={data} kcalPerKg={d.kcalPerKg} onUse={(kcal) => set('maintenanceKcal', kcal)} />
+        </div>
+      )}
+
+      <details>
+        <summary>記録する項目</summary>
+        <div style={{ marginTop: 4 }}>
+          {SHOW_LABELS.map(([key, label, hint]) => (
+            <label className="toggle" key={key}>
+              <span>
+                {label}
+                <span className="muted" style={{ display: 'block' }}>
+                  {hint}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={d.show[key]}
+                onChange={(e) => set('show', { ...d.show, [key]: e.target.checked })}
+              />
+            </label>
+          ))}
+          <div className="muted">オフにすると入力欄と関連する表示を隠します。入力済みの記録は消えません。</div>
+        </div>
+      </details>
+
       <details>
         <summary>計算の係数・閾値</summary>
         <div className="grid2" style={{ marginTop: 8 }}>
           <NumField label="体重補正の指数" value={Number(d.allometricExponent.toFixed(4))} onChange={num('allometricExponent')} />
           <NumField label="「境界」の下限（×必要ペース）" value={d.borderlineFactor} onChange={num('borderlineFactor')} />
-          <NumField label="落ち幅：正常の上限 kg" value={d.dropNormalMaxKg} onChange={num('dropNormalMaxKg')} />
-          <NumField label="落ち幅：グレーの上限 kg" value={d.dropGreyMaxKg} onChange={num('dropGreyMaxKg')} />
-          <NumField label="83kg級ルートの月数" value={d.route83Months} onChange={num('route83Months')} />
-          <TextField
-            label="83kg級の着地目標 kg"
-            value={d.route83TargetsKg.join(', ')}
-            onChange={(t) =>
-              set(
-                'route83TargetsKg',
-                t
-                  .split(/[,、\s]+/)
-                  .map(Number)
-                  .filter((n) => Number.isFinite(n) && n > 0),
-              )
-            }
-          />
+          <NumField label="落ち幅：正常の上限 %" value={Number(d.dropNormalMaxPct.toFixed(2))} onChange={num('dropNormalMaxPct')} />
+          <NumField label="落ち幅：グレーの上限 %" value={Number(d.dropGreyMaxPct.toFixed(2))} onChange={num('dropGreyMaxPct')} />
           <NumField label="増量ペース上限 kg/月" value={d.bulkPaceMaxPerMonth} onChange={num('bulkPaceMaxPerMonth')} />
           <NumField label="増量ペース下限 kg/月" value={d.bulkPaceMinPerMonth} onChange={num('bulkPaceMinPerMonth')} />
           <NumField label="減量ペース上限 kg/月" value={d.cutPaceMaxPerMonth} onChange={num('cutPaceMaxPerMonth')} />
           <NumField label="e1RM低下の警告 %" value={d.e1rmDropAlertPct} onChange={num('e1rmDropAlertPct')} />
-          <NumField label="体重1kgあたり kcal" value={d.kcalPerKg} onChange={num('kcalPerKg')} />
+          {d.show.bodyFat && (
+            <NumField label="体脂肪率の上限 %" value={d.bodyFatLimitPct} onChange={num('bodyFatLimitPct')} />
+          )}
+          {d.show.nutrition && <NumField label="体重1kgあたり kcal" value={d.kcalPerKg} onChange={num('kcalPerKg')} />}
         </div>
         <div className="muted" style={{ marginTop: 6 }}>
-          必要ペースの係数と予測の倍率は、サイクルごとに設定します。
+          落ち幅は、増量終了時のトータルに対する割合で見ます。必要ペースの係数と予測の倍率は、サイクルごとに設定します。
         </div>
       </details>
       <button type="button" className="btn primary" onClick={save} disabled={!dirty}>

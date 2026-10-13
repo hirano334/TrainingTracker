@@ -1,16 +1,17 @@
 import { adjustedTotal } from './adjust'
 import { checkpointTotals, type Totals } from './e1rm'
 import { resolveFormula } from './formulas'
+import { monthsBetween } from './planning'
 import type { Cycle, DailyLog, ISODate, Settings, TopSet } from './types'
 import { avgWeightInWindow } from './weight'
 
 export type PaceVerdict = 'inRange' | 'borderline' | 'hard'
 export type DropVerdict = 'normal' | 'grey' | 'large'
-export type ClassVerdict = 'either' | 'lean83' | 'recommend83' | 'recommend74'
+export type ClassVerdict = 'either' | 'leanUpper' | 'recommendUpper' | 'recommendLower'
 
-/** 5.4 必要ペース = (74kg級標準 − 基準トータル) × 係数 */
-export function requiredGain(standard74: number, baseTotal: number, factor: number): number {
-  return (standard74 - baseTotal) * factor
+/** 5.4 必要ペース = (目標トータル − 基準トータル) × 係数 */
+export function requiredGain(goalTotal: number, baseTotal: number, factor: number): number {
+  return (goalTotal - baseTotal) * factor
 }
 
 /** 5.4 判定① */
@@ -20,23 +21,24 @@ export function judgePace(gain: number, required: number, s: Settings): PaceVerd
   return 'hard'
 }
 
-/** 5.5 判定② */
-export function judgeDrop(drop: number, s: Settings): DropVerdict {
-  if (drop <= s.dropNormalMaxKg) return 'normal'
-  if (drop <= s.dropGreyMaxKg) return 'grey'
+/** 5.5 判定②。落ち幅は増量終了時のトータルに対する割合(%)で見る */
+export function judgeDrop(dropPct: number, s: Settings): DropVerdict {
+  if (dropPct <= s.dropNormalMaxPct) return 'normal'
+  if (dropPct <= s.dropGreyMaxPct) return 'grey'
   return 'large'
 }
 
 /** 5.6 階級判定のまとめ */
 export function judgeClass(pace: PaceVerdict, drop: DropVerdict): ClassVerdict {
-  if (pace === 'hard') return 'recommend74'
+  // 目標に届くのが厳しいなら、上の階級に上げるぶんの増量コストをかけない
+  if (pace === 'hard') return 'recommendLower'
   if (drop === 'normal') return 'either'
-  if (drop === 'grey') return 'lean83'
-  return 'recommend83'
+  if (drop === 'grey') return 'leanUpper'
+  return 'recommendUpper'
 }
 
-/** 5.7 必要な月ペース = (着地目標体重 − 2月末の週平均体重) / 月数 */
-export function route83Pace(targetKg: number, weekAvgWeight: number, months: number): number {
+/** 5.7 必要な月ペース = (着地目標体重 − 減量終了時の週平均体重) / 月数 */
+export function upperRoutePace(targetKg: number, weekAvgWeight: number, months: number): number {
   return (targetKg - weekAvgWeight) / months
 }
 
@@ -56,9 +58,14 @@ export interface Judgement {
   projection: number | null
   atBulkEnd: Totals | null
   drop: number | null
+  /** 落ち幅の、増量終了時のトータルに対する割合(%) */
+  dropPct: number | null
   dropVerdict: DropVerdict | null
+  /** 階級の判定。設定で使わないことにしていれば null */
   classVerdict: ClassVerdict | null
-  route83: { targetKg: number; perMonth: number }[]
+  /** 上の階級に上げるのに使える月数。大会日も手入力も無ければ null */
+  upperRouteMonths: number | null
+  upperRoute: { targetKg: number; perMonth: number }[]
 }
 
 /** 申告されたサイクル1件を判定する */
@@ -76,7 +83,8 @@ export function judge(s: Settings, cycle: Cycle, logs: DailyLog[], sets: TopSet[
 
   const base = cycle.baseTotal
   const gain = adjTotal !== null && base !== null ? adjTotal - base : null
-  const required = base !== null ? requiredGain(s.standard74, base, cycle.requiredPaceFactor) : null
+  const required =
+    base !== null && s.goalTotal !== null ? requiredGain(s.goalTotal, base, cycle.requiredPaceFactor) : null
   const pace = gain !== null && required !== null ? judgePace(gain, required, s) : null
   const projection = gain !== null && base !== null ? base + gain * cycle.projectionMultiplier : null
 
@@ -85,15 +93,23 @@ export function judge(s: Settings, cycle: Cycle, logs: DailyLog[], sets: TopSet[
   const atBulkEnd = inCut ? checkpointTotals(sets, cycle.bulkEndDate, fn) : null
   const drop =
     atBulkEnd && atBulkEnd.total !== null && now.total !== null ? atBulkEnd.total - now.total : null
-  const dropVerdict = drop !== null ? judgeDrop(drop, s) : null
+  const dropPct =
+    drop !== null && atBulkEnd && atBulkEnd.total !== null && atBulkEnd.total > 0
+      ? (drop / atBulkEnd.total) * 100
+      : null
+  const dropVerdict = dropPct !== null ? judgeDrop(dropPct, s) : null
 
-  const classVerdict = pace !== null && dropVerdict !== null ? judgeClass(pace, dropVerdict) : null
+  const classVerdict =
+    s.classChoice && pace !== null && dropVerdict !== null ? judgeClass(pace, dropVerdict) : null
 
-  const route83 =
-    weekAvgWeight !== null
-      ? s.route83TargetsKg.map((targetKg) => ({
+  const months =
+    s.upperRouteMonths ?? (s.mainMeetDate !== null ? monthsBetween(evalDate, s.mainMeetDate) : null)
+  const upperRouteMonths = s.classChoice && months !== null && months > 0 ? months : null
+  const upperRoute =
+    weekAvgWeight !== null && upperRouteMonths !== null
+      ? s.upperLandingTargetsKg.map((targetKg) => ({
           targetKg,
-          perMonth: route83Pace(targetKg, weekAvgWeight, s.route83Months),
+          perMonth: upperRoutePace(targetKg, weekAvgWeight, upperRouteMonths),
         }))
       : []
 
@@ -110,9 +126,11 @@ export function judge(s: Settings, cycle: Cycle, logs: DailyLog[], sets: TopSet[
     projection,
     atBulkEnd,
     drop,
+    dropPct,
     dropVerdict,
     classVerdict,
-    route83,
+    upperRouteMonths,
+    upperRoute,
   }
 }
 

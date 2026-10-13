@@ -1,18 +1,23 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { exportJSON, importJSON, parsePayload } from './backup'
-import { put, readAll, remove, resetLocal, TrackerDB } from './db'
+import { EXAMPLE_CYCLES } from '../domain/example'
+import { getMeta, put, readAll, remove, resetLocal, SETUP_DONE, TrackerDB } from './db'
 
 let n = 0
 const fresh = () => new TrackerDB(`test-${n++}`)
 const log = (date: string, weight: number) => ({ date, weight, bodyFatPct: null, kcal: null, proteinG: null })
 
 describe('保存', () => {
-  it('初回に要件定義の初期値が入る', async () => {
+  it('初回は白紙。特定の人の計画は入れず、セットアップ待ちになる', async () => {
     const d = fresh()
     const all = await readAll(d)
-    expect(all.settings[0].baseWeight).toBe(72.5)
-    expect(all.phases.map((p) => p.name).sort()).toEqual(['NF減量', '判定', '増量1', '減量1'].sort())
+    expect(all.settings).toHaveLength(1)
+    expect(all.settings[0].goalTotal).toBeNull()
+    expect(all.settings[0].classChoice).toBe(false)
+    expect(all.phases).toEqual([])
+    expect(all.cycles).toEqual([])
+    expect(await getMeta(SETUP_DONE, d)).toBeUndefined()
   })
   it('削除は行を残してフラグを立てる', async () => {
     const d = fresh()
@@ -26,15 +31,15 @@ describe('保存', () => {
     const d = fresh()
     await put('dailyLogs', log('2026-12-01', 72.5), d)
     await put('topSets', { id: 'a', date: '2026-12-01', lift: 'SQ', weight: 150, reps: 3, rpe: 8, comp: true, memo: '' }, d)
-    await put('settings', { ...(await readAll(d)).settings[0], standard74: 545 }, d)
-    await put('cycles', { ...(await readAll(d)).cycles[0], baseTotal: 470 }, d)
+    await put('settings', { ...(await readAll(d)).settings[0], goalTotal: 545 }, d)
+    await put('cycles', { ...EXAMPLE_CYCLES[0], baseTotal: 470 }, d)
     const before = await readAll(d)
     const json = await exportJSON(d)
 
     await resetLocal(d)
     expect((await readAll(d)).dailyLogs).toEqual([])
-    expect((await readAll(d)).settings[0].standard74).toBe(540)
-    expect((await readAll(d)).cycles[0].baseTotal).toBeNull()
+    expect((await readAll(d)).settings[0].goalTotal).toBeNull()
+    expect((await readAll(d)).cycles).toEqual([])
 
     await importJSON(json, d)
     const after = await readAll(d)

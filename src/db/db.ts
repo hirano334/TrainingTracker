@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable, type Table } from 'dexie'
-import { DEFAULT_CYCLE_FACTORS, DEFAULT_CYCLES, DEFAULT_PHASES, DEFAULT_SETTINGS } from '../domain/defaults'
+import { DEFAULT_CYCLE_FACTORS, DEFAULT_SETTINGS } from '../domain/defaults'
+import { EXAMPLE_CYCLES } from '../domain/example'
 import { findPhasePairs } from '../domain/phases'
 import {
   TABLES,
@@ -20,6 +21,12 @@ export interface Meta {
   key: string
   value: unknown
 }
+
+/** version 1 の頃に初期値として入っていた第1サイクル。version 2 への移行で、欠けた値の補いに使う */
+const LEGACY_CYCLE = EXAMPLE_CYCLES[0]
+
+/** meta のキー：初回セットアップを済ませたか（飛ばした場合も含む） */
+export const SETUP_DONE = 'setupDone'
 
 export class TrackerDB extends Dexie {
   settings!: EntityTable<Settings, 'id'>
@@ -55,24 +62,28 @@ export class TrackerDB extends Dexie {
             })
           | undefined
         const phases = (await tx.table('phases').toArray()) as Phase[]
-        const baseDate = old?.baseDate ?? DEFAULT_CYCLES[0].baseDate
+        const baseDate = old?.baseDate ?? LEGACY_CYCLE.baseDate
         const pair = findPhasePairs(phases).find((p) => p.bulk.endDate > baseDate)
         await tx.table('cycles').add({
-          ...DEFAULT_CYCLES[0],
+          ...LEGACY_CYCLE,
           updatedAt: old?.updatedAt ?? 0,
           baseDate,
-          baseWeight: old?.baseWeight ?? DEFAULT_CYCLES[0].baseWeight,
+          baseWeight: old?.baseWeight ?? LEGACY_CYCLE.baseWeight,
           baseTotal: old?.baseTotal ?? null,
-          bulkEndDate: pair?.bulk.endDate ?? DEFAULT_CYCLES[0].bulkEndDate,
-          cutEndDate: pair?.cut.endDate ?? DEFAULT_CYCLES[0].cutEndDate,
+          bulkEndDate: pair?.bulk.endDate ?? LEGACY_CYCLE.bulkEndDate,
+          cutEndDate: pair?.cut.endDate ?? LEGACY_CYCLE.cutEndDate,
           requiredPaceFactor: old?.requiredPaceFactor ?? DEFAULT_CYCLE_FACTORS.requiredPaceFactor,
           projectionMultiplier: old?.projectionMultiplier ?? DEFAULT_CYCLE_FACTORS.projectionMultiplier,
         } satisfies Cycle)
       })
+    // 3: 初期値を特定の人の計画ではなく白紙にし、初回セットアップで作るようにした。
+    // それまでのデータベースには計画が入っているので、セットアップ済みとして扱う
+    this.version(3).upgrade(async (tx) => {
+      await tx.table('meta').put({ key: SETUP_DONE, value: true })
+    })
+    // 新しく作られたときは設定だけを入れる。フェーズ表とサイクルは初回セットアップが作る
     this.on('populate', (tx) => {
       tx.table('settings').add(DEFAULT_SETTINGS)
-      tx.table('phases').bulkAdd(DEFAULT_PHASES)
-      tx.table('cycles').bulkAdd(DEFAULT_CYCLES)
     })
   }
 }
@@ -155,8 +166,6 @@ export async function resetLocal(d: TrackerDB = db): Promise<void> {
     for (const t of TABLES) await table(d, t).clear()
     await d.meta.clear()
     await d.settings.add(DEFAULT_SETTINGS)
-    await d.phases.bulkAdd(DEFAULT_PHASES)
-    await d.cycles.bulkAdd(DEFAULT_CYCLES)
   })
 }
 

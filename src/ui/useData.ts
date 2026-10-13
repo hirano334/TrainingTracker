@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useSyncExternalStore } from 'react'
-import { getMeta, readAll } from '../db/db'
-import { DEFAULT_SETTINGS } from '../domain/defaults'
+import { getMeta, readAll, SETUP_DONE } from '../db/db'
+import { normalizeSettings } from '../domain/defaults'
 import { resolveFormula, type ResolvedFormula } from '../domain/formulas'
 import { referenceWeight, sortCycles } from '../domain/judgement'
 import { activePhases } from '../domain/phases'
@@ -33,8 +33,8 @@ export function useData(): Data | undefined {
   const all = useLiveQuery(() => readAll(), [])
   return useMemo(() => {
     if (!all) return undefined
-    // 旧版で保存した設定には新しい項目が無いので、初期値で補う
-    const settings = { ...DEFAULT_SETTINGS, ...all.settings.find((s) => !s.deleted) }
+    // 旧版で保存した設定を今の形に読み替える
+    const settings = normalizeSettings(all.settings.find((s) => !s.deleted))
     const cycles = sortCycles(all.cycles)
     return {
       settings,
@@ -52,6 +52,11 @@ export function useData(): Data | undefined {
 
 export function useMeta<T>(key: string): T | undefined {
   return useLiveQuery(() => getMeta<T>(key), [key])
+}
+
+/** 初回セットアップを済ませたか。読み込み中は null */
+export function useSetupDone(): boolean | null {
+  return useLiveQuery(async () => (await getMeta<boolean>(SETUP_DONE)) === true, [], null)
 }
 
 export function useSyncState(): SyncState {

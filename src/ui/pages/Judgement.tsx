@@ -7,7 +7,7 @@ import {
   type Judgement as J,
   type PaceVerdict,
 } from '../../domain/judgement'
-import type { Checkpoint } from '../../domain/types'
+import type { Checkpoint, Settings } from '../../domain/types'
 import { addDays, shortDate, todayISO } from '../../domain/weeks'
 import { f1, signed } from '../format'
 import type { Data } from '../useData'
@@ -22,20 +22,33 @@ const PACE: Record<PaceVerdict, { label: string; tone: Tone }> = {
 const DROP: Record<DropVerdict, { label: string; short: string; tone: Tone }> = {
   normal: { label: '正常（体重減の分だけ落ちた）', short: '正常', tone: 'good' },
   grey: { label: 'グレー', short: 'グレー', tone: 'warning' },
-  large: { label: '減量で重量を失いやすい → 83kg級が有利', short: '落ちやすい', tone: 'serious' },
+  large: { label: '減量で重量を失いやすい', short: '落ちやすい', tone: 'serious' },
 }
-export const CLASS_LABEL: Record<ClassVerdict, string> = {
-  either: 'どちらも可。見た目の好みで選ぶ（74級は体脂肪11〜12%を維持、83級は大会時に約17%）',
-  recommend83: '83kg級を推奨',
-  lean83: '83kg級寄り。どちらも可',
-  recommend74: '74kg級を推奨（追加の増量コストがかからない）',
+
+/** 判定②の表示。階級を迷っている場合は、落ちやすい＝上の階級が有利、まで言う */
+const dropBadge = (v: DropVerdict, s: Settings) =>
+  v === 'large' && s.classChoice ? { ...DROP.large, label: `${DROP.large.label} → ${s.upperClassName}が有利` } : DROP[v]
+
+/** 階級の判定の文言。階級の名前は設定から */
+export function classLabel(v: ClassVerdict, s: Settings): string {
+  switch (v) {
+    case 'either':
+      return `どちらも可。好みで選ぶ${s.classNote ? `（${s.classNote}）` : ''}`
+    case 'recommendUpper':
+      return `${s.upperClassName}を推奨`
+    case 'leanUpper':
+      return `${s.upperClassName}寄り。どちらも可`
+    case 'recommendLower':
+      return `${s.lowerClassName}を推奨（追加の増量コストがかからない）`
+  }
 }
-const CLASS_SHORT: Record<ClassVerdict, string> = {
-  either: 'どちらも可',
-  recommend83: '83kg級',
-  lean83: '83kg級寄り',
-  recommend74: '74kg級',
-}
+const classShort = (v: ClassVerdict, s: Settings) =>
+  ({
+    either: 'どちらも可',
+    recommendUpper: s.upperClassName,
+    leanUpper: `${s.upperClassName}寄り`,
+    recommendLower: s.lowerClassName,
+  })[v]
 
 function Badge({ v }: { v: { label: string; tone: Tone } | null }) {
   if (!v) return <span className="badge">未判定</span>
@@ -67,18 +80,24 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
 
   return (
     <>
-      <div className="card">
-        <h2>階級の判定</h2>
-        <div style={{ fontSize: 18, fontWeight: 600 }}>{j.classVerdict ? CLASS_LABEL[j.classVerdict] : '未判定'}</div>
-        {!j.classVerdict && (
-          <div className="sub" style={{ marginTop: 6 }}>
-            {c.baseTotal === null && <div>・基準トータルが未入力（設定のサイクル）</div>}
-            {j.now.total === null && <div>・直近2週に SQ・BP・DL の試合基準のセットが必要</div>}
-            {j.weekAvgWeight === null && <div>・直近7日の体重が必要</div>}
-            {j.drop === null && j.now.total !== null && <div>・落ち幅は減量期に入ってから計算</div>}
+      {s.classChoice && (
+        <div className="card">
+          <h2>階級の判定</h2>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>
+            {j.classVerdict ? classLabel(j.classVerdict, s) : '未判定'}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+      {(j.pace === null || j.dropVerdict === null) && (
+        <div className="card sub">
+          <b style={{ color: 'var(--text)' }}>判定に足りないもの</b>
+          {s.goalTotal === null && <div>・目標トータルが未入力（設定のパラメータ）</div>}
+          {c.baseTotal === null && <div>・基準トータルが未入力（設定のサイクル）</div>}
+          {j.now.total === null && <div>・直近2週に SQ・BP・DL の試合基準のセットが必要</div>}
+          {j.weekAvgWeight === null && <div>・直近7日の体重が必要</div>}
+          {j.drop === null && j.now.total !== null && <div>・落ち幅は減量期に入ってから計算</div>}
+        </div>
+      )}
 
       <div className="card">
         <div className="row between">
@@ -116,7 +135,7 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
               <th>
                 必要ペース
                 <div className="muted">
-                  ({s.standard74} − 基準トータル) × {c.requiredPaceFactor}
+                  (目標 {s.goalTotal ?? '—'} − 基準トータル) × {c.requiredPaceFactor}
                 </div>
               </th>
               <td>{signed(j.required)} kg</td>
@@ -125,7 +144,8 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
               <th>
                 本命大会時点の予測トータル
                 <div className="muted">
-                  基準 + 伸び × {c.projectionMultiplier}／標準 74kg級 {s.standard74}・83kg級 {s.standard83}
+                  基準 + 伸び × {c.projectionMultiplier}／目標 {s.goalTotal ?? '—'}
+                  {s.classChoice && s.upperClassStandard !== null && `・${s.upperClassName}の標準 ${s.upperClassStandard}`}
                 </div>
               </th>
               <td>{f1(j.projection)} kg</td>
@@ -150,7 +170,7 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
       <div className="card">
         <div className="row between wrap">
           <h2 style={{ margin: 0 }}>判定② 減量による落ち幅</h2>
-          <Badge v={j.dropVerdict && DROP[j.dropVerdict]} />
+          <Badge v={j.dropVerdict && dropBadge(j.dropVerdict, s)} />
         </div>
         <table className="kv" style={{ marginTop: 8 }}>
           <tbody>
@@ -169,43 +189,56 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
               <th>
                 落ち幅
                 <div className="muted">
-                  体重補正なし。〜{s.dropNormalMaxKg}kg 正常／〜{s.dropGreyMaxKg}kg グレー
+                  体重補正なし。{shortDate(c.bulkEndDate)}のトータルの {s.dropNormalMaxPct}% まで正常／{s.dropGreyMaxPct}%
+                  までグレー
                 </div>
               </th>
               <td>
                 <b>{f1(j.drop)} kg</b>
+                <div className="muted">{j.dropPct === null ? '' : `${j.dropPct.toFixed(1)}%`}</div>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div className="card">
-        <h2>83kg級ルートの必要ペース</h2>
-        {j.route83.length === 0 ? (
-          <div className="sub">直近7日の体重が必要です。</div>
-        ) : (
-          <table className="kv">
-            <tbody>
-              {j.route83.map((r) => (
-                <tr key={r.targetKg}>
-                  <th>{r.targetKg}kg に着地</th>
-                  <td>{signed(r.perMonth, 2)} kg/月</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <div className="muted" style={{ marginTop: 6 }}>
-          (着地目標 − {shortDate(j.evalDate)}時点の週平均体重) ÷ {s.route83Months}ヶ月
+      {s.classChoice && (
+        <div className="card">
+          <h2>{s.upperClassName}に上げる場合の必要ペース</h2>
+          {j.upperRoute.length === 0 ? (
+            <div className="sub">
+              {j.weekAvgWeight === null
+                ? '直近7日の体重が必要です。'
+                : j.upperRouteMonths === null
+                  ? '本命大会の日付か、使える月数を設定に入れてください。'
+                  : '着地目標の体重を設定に入れてください。'}
+            </div>
+          ) : (
+            <table className="kv">
+              <tbody>
+                {j.upperRoute.map((r) => (
+                  <tr key={r.targetKg}>
+                    <th>{r.targetKg}kg に着地</th>
+                    <td>{signed(r.perMonth, 2)} kg/月</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {j.upperRouteMonths !== null && (
+            <div className="muted" style={{ marginTop: 6 }}>
+              (着地目標 − {shortDate(j.evalDate)}時点の週平均体重) ÷ {Number(j.upperRouteMonths.toFixed(1))}ヶ月
+              {s.upperRouteMonths === null && '（本命大会までの月数）'}
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </>
   )
 }
 
 /** サイクル同士の比較 */
-function Compare({ all }: { all: J[] }) {
+function Compare({ all, s }: { all: J[]; s: Settings }) {
   return (
     <div className="card">
       <h2>サイクルの比較</h2>
@@ -219,7 +252,7 @@ function Compare({ all }: { all: J[] }) {
               <th>判定①</th>
               <th>落ち幅</th>
               <th>判定②</th>
-              <th>階級</th>
+              {s.classChoice && <th>階級</th>}
             </tr>
           </thead>
           <tbody>
@@ -234,7 +267,7 @@ function Compare({ all }: { all: J[] }) {
                 <td>{j.pace ? PACE[j.pace].label : '—'}</td>
                 <td>{f1(j.drop)}</td>
                 <td>{j.dropVerdict ? DROP[j.dropVerdict].short : '—'}</td>
-                <td>{j.classVerdict ? CLASS_SHORT[j.classVerdict] : '—'}</td>
+                {s.classChoice && <td>{j.classVerdict ? classShort(j.classVerdict, s) : '—'}</td>}
               </tr>
             ))}
           </tbody>
@@ -297,7 +330,7 @@ export function Judgement({ data, openReport }: { data: Data; openReport: (cycle
       </div>
 
       <JudgementCards j={current} data={data} />
-      {all.length > 1 && <Compare all={all} />}
+      {all.length > 1 && <Compare all={all} s={data.settings} />}
 
       <button type="button" className="btn" style={{ width: '100%' }} onClick={() => openReport(c.id)}>
         レポートを開く（印刷・PDF）

@@ -10,15 +10,41 @@ export interface SyncMeta {
   deleted?: boolean
 }
 
+/** 使わない記録項目を隠すための切り替え */
+export interface ShowFlags {
+  /** ウエスト周径 */
+  waist: boolean
+  /** 摂取カロリー・タンパク質・維持カロリー */
+  nutrition: boolean
+  /** 体脂肪率 */
+  bodyFat: boolean
+  /** チェックポイント測定（実測MAX・睡眠・疲労度） */
+  checkpoint: boolean
+}
+
 /** 要件定義 2章。計算に使う数値はすべてここに置く */
 export interface Settings extends SyncMeta {
   id: 'settings'
-  heightCm: number
+  heightCm: number | null
   /** 基準日・基準体重は、サイクルが1つも無いときの体重補正の基準 */
   baseDate: ISODate
   baseWeight: number
-  standard74: number
-  standard83: number
+
+  /** 判定①で届くかを見る目標トータル（標準記録など） */
+  goalTotal: number | null
+  /** 階級の判定（いまの階級か、上の階級か）を使うか */
+  classChoice: boolean
+  lowerClassName: string
+  upperClassName: string
+  /** 上の階級の標準記録（表示用） */
+  upperClassStandard: number | null
+  /** 5.7 上の階級に上げる場合の着地目標体重 */
+  upperLandingTargetsKg: number[]
+  /** 5.7 上の階級に上げるのに使える月数。null なら本命大会の日付から計算 */
+  upperRouteMonths: number | null
+  /** 「どちらも可」のときに添える、自分用の判断材料のメモ */
+  classNote: string
+
   mainMeetDate: ISODate | null
   springMeetDate: ISODate | null
   bodyFatLimitPct: number
@@ -33,17 +59,16 @@ export interface Settings extends SyncMeta {
 
   /** 5.4 「境界」の下限（必要ペースに掛ける） */
   borderlineFactor: number
-  /** 5.5 落ち幅の閾値(kg) */
-  dropNormalMaxKg: number
-  dropGreyMaxKg: number
-  /** 5.7 83kg級ルートの着地目標と月数 */
-  route83TargetsKg: number[]
-  route83Months: number
+  /** 5.5 落ち幅の閾値。増量終了時のトータルに対する割合(%) */
+  dropNormalMaxPct: number
+  dropGreyMaxPct: number
   /** 5.8 アラート閾値 (kg/月, %) */
   bulkPaceMaxPerMonth: number
   bulkPaceMinPerMonth: number
   cutPaceMaxPerMonth: number
   e1rmDropAlertPct: number
+
+  show: ShowFlags
 }
 
 /** 推定1RMの式。expr は domain/expr.ts の評価器で解釈する */

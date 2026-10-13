@@ -79,10 +79,8 @@ export function Report({ data, cycleId, close }: { data: Data; cycleId: string; 
               </td>
             </tr>
             <tr>
-              <th>標準記録（74kg級 / 83kg級）</th>
-              <td>
-                {s.standard74} / {s.standard83} kg
-              </td>
+              <th>目標トータル{s.classChoice && `（${s.lowerClassName}）`}</th>
+              <td>{s.goalTotal ?? '—'} kg</td>
             </tr>
             <tr>
               <th>体重補正の指数</th>
@@ -101,7 +99,7 @@ export function Report({ data, cycleId, close }: { data: Data; cycleId: string; 
             <tr>
               <th>落ち幅の閾値（正常 / グレー）</th>
               <td>
-                {s.dropNormalMaxKg} / {s.dropGreyMaxKg} kg
+                {s.dropNormalMaxPct} / {s.dropGreyMaxPct} %
               </td>
             </tr>
           </tbody>

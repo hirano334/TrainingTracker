@@ -11,6 +11,7 @@ import {
   validateFormula,
 } from '../../domain/formulas'
 import { findPhasePairs } from '../../domain/phases'
+import { suggestFactors } from '../../domain/planning'
 import type { Cycle } from '../../domain/types'
 import { addDays, todayISO } from '../../domain/weeks'
 import { avgWeightInWindow } from '../../domain/weight'
@@ -197,6 +198,10 @@ function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Cycle }) {
   const measuredWeight = avgWeightInWindow(data.dailyLogs, d.baseDate)
   const measuredTotal = checkpointTotals(data.topSets, d.baseDate, data.formula.fn).total
   const pairs = findPhasePairs(data.phases).filter((p) => p.bulk.startDate !== null)
+  const suggested = ordered ? suggestFactors(d, data.settings.mainMeetDate) : null
+  const differs =
+    suggested !== null &&
+    (suggested.requiredPaceFactor !== d.requiredPaceFactor || suggested.projectionMultiplier !== d.projectionMultiplier)
 
   return (
     <details>
@@ -269,8 +274,25 @@ function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Cycle }) {
           <NumField label="必要ペースの係数" value={d.requiredPaceFactor} onChange={num('requiredPaceFactor')} />
           <NumField label="本命大会時点の予測の倍率" value={d.projectionMultiplier} onChange={num('projectionMultiplier')} />
         </div>
+        {suggested && differs && (
+          <button
+            type="button"
+            className="link"
+            onClick={() =>
+              setD((p) => ({
+                ...p,
+                requiredPaceFactor: suggested.requiredPaceFactor,
+                projectionMultiplier: suggested.projectionMultiplier,
+              }))
+            }
+          >
+            本命大会まで約{suggested.cycles.toFixed(1)}サイクル → 係数 {suggested.requiredPaceFactor}、倍率{' '}
+            {suggested.projectionMultiplier} を使う
+          </button>
+        )}
         <div className="muted">
-          第1サイクルの 0.4 と 2.5 は、本命大会まで残り約2.5サイクルで伸びが少しずつ鈍る前提の値。残りサイクル数が変わったら見直す。
+          本命大会までの各サイクルで、伸びが 1 : 0.8 : 0.7 … と少しずつ鈍ると仮定した値。倍率はその合計、係数は 1 ÷ 倍率。
+          {data.settings.mainMeetDate === null && '本命大会の日付を入れると、日付から計算した候補が出ます。'}
         </div>
         <div className="row">
           <button

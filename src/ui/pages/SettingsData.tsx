@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { csv, dailyLogsCSV, download, downloadBackup, importJSON, topSetsCSV } from '../../db/backup'
 import { applyImport, parseImport, type ParsedImport } from '../../db/csvImport'
-import { resetLocal, writeNewer } from '../../db/db'
+import { putMany, resetLocal, writeNewer } from '../../db/db'
+import { EXAMPLE_CYCLES, EXAMPLE_PHASES, EXAMPLE_SETTINGS } from '../../domain/example'
 import { buildResults, weeklyTable } from '../../domain/report'
 import { sampleData } from '../../domain/sample'
 import { todayISO } from '../../domain/weeks'
@@ -197,11 +198,15 @@ export function Backup({ data, toast }: SettingsProps) {
             type="button"
             className="btn"
             onClick={async () => {
+              // 要件定義どおりの設定例と、それに合わせた3ヶ月半ぶんの記録
+              await putMany('settings', [EXAMPLE_SETTINGS])
+              await putMany('phases', EXAMPLE_PHASES)
+              await putMany('cycles', EXAMPLE_CYCLES)
               await writeNewer(sampleData())
               toast('サンプルデータを入れました')
             }}
           >
-            （開発用）サンプルデータを入れる
+            （開発用）設定例とサンプルデータを入れる
           </button>
         )}
         <button

@@ -6,7 +6,8 @@ import { Input } from './ui/pages/Input'
 import { Judgement } from './ui/pages/Judgement'
 import { Report } from './ui/pages/Report'
 import { Settings } from './ui/pages/Settings'
-import { useData } from './ui/useData'
+import { Setup } from './ui/pages/Setup'
+import { useData, useSetupDone } from './ui/useData'
 
 const TABS = ['ホーム', '入力', 'グラフ', '判定', '設定'] as const
 type Tab = (typeof TABS)[number]
@@ -23,6 +24,10 @@ const ICONS: Record<Tab, ReactNode> = {
 
 export function App() {
   const data = useData()
+  const setupDone = useSetupDone()
+  // 計画がまだ何も無い新しい端末では、最初に初回セットアップを出す
+  const needsSetup =
+    data !== undefined && setupDone === false && data.phases.length === 0 && data.cycles.length === 0
   const [tab, setTab] = useState<Tab>('ホーム')
   /** 開いている判定レポートのサイクル */
   const [report, setReport] = useState<string | null>(null)
@@ -43,8 +48,13 @@ export function App() {
   return (
     <>
       <main className="app">
-        {data && report !== null && <Report data={data} cycleId={report} close={() => setReport(null)} />}
+        {data && needsSetup && <Setup data={data} toast={toast} />}
+        {data && !needsSetup && setupDone !== null && report !== null && (
+          <Report data={data} cycleId={report} close={() => setReport(null)} />
+        )}
         {data &&
+          !needsSetup &&
+          setupDone !== null &&
           report === null &&
           {
             ホーム: <Home data={data} />,
@@ -67,6 +77,7 @@ export function App() {
           {msg}
         </div>
       )}
+      {!needsSetup && (
       <nav className="tabs">
         {TABS.map((t) => (
           <button
@@ -86,6 +97,7 @@ export function App() {
           </button>
         ))}
       </nav>
+      )}
     </>
   )
 }

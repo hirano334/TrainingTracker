@@ -1,17 +1,26 @@
-import type { Cycle, Phase, Settings } from './types'
+import type { Settings } from './types'
 
 // 初期値は updatedAt: 0 にする。別の端末やバックアップに実データがあれば必ずそちらが勝つ
 
-/** 要件定義 2章の初期値 */
+/**
+ * 何も設定していない状態。人や時期で決まる値（体重・目標・階級・大会日・フェーズ・サイクル）は
+ * ここには置かず、初回セットアップ（setup.ts）で聞いて作る。
+ */
 export const DEFAULT_SETTINGS: Settings = {
   id: 'settings',
   updatedAt: 0,
-  heightCm: 178,
-  baseDate: '2026-11-30',
-  baseWeight: 72.5,
-  standard74: 540,
-  standard83: 570,
-  mainMeetDate: '2027-10-01',
+  heightCm: null,
+  baseDate: '2026-01-01',
+  baseWeight: 70,
+  goalTotal: null,
+  classChoice: false,
+  lowerClassName: 'いまの階級',
+  upperClassName: '上の階級',
+  upperClassStandard: null,
+  upperLandingTargetsKg: [],
+  upperRouteMonths: null,
+  classNote: '',
+  mainMeetDate: null,
   springMeetDate: null,
   bodyFatLimitPct: 17,
   allometricExponent: 2 / 3,
@@ -20,95 +29,58 @@ export const DEFAULT_SETTINGS: Settings = {
   e1rmFormulaId: 'epley',
   customFormulas: [],
   borderlineFactor: 0.5,
-  dropNormalMaxKg: 10,
-  dropGreyMaxKg: 15,
-  route83TargetsKg: [81, 82],
-  route83Months: 7,
+  dropNormalMaxPct: 2,
+  dropGreyMaxPct: 3,
   bulkPaceMaxPerMonth: 2.0,
   bulkPaceMinPerMonth: 1.0,
   cutPaceMaxPerMonth: 2.0,
   e1rmDropAlertPct: 5,
+  show: { waist: true, nutrition: true, bodyFat: true, checkpoint: true },
 }
 
-/** 要件定義 3章の初期値 */
-export const DEFAULT_PHASES: Phase[] = [
-  {
-    id: 'nf-cut',
-    updatedAt: 0,
-    name: 'NF減量',
-    kind: 'cut',
-    startDate: null,
-    endDate: '2026-11-30',
-    startWeight: 74.0,
-    targetWeightMin: 72.5,
-    targetWeightMax: 72.5,
-    // −0.3kg/週 × 30/7
-    targetPacePerMonth: -1.3,
-    paceNote: '−0.25〜0.35kg/週',
-    kcalOffsetMin: -200,
-    kcalOffsetMax: -300,
-  },
-  {
-    id: 'bulk-1',
-    updatedAt: 0,
-    name: '増量1',
-    kind: 'bulk',
-    startDate: '2026-12-01',
-    endDate: '2027-01-31',
-    startWeight: 72.5,
-    targetWeightMin: 75.5,
-    targetWeightMax: 75.5,
-    targetPacePerMonth: 1.5,
-    paceNote: '+1.5kg/月',
-    kcalOffsetMin: 400,
-    kcalOffsetMax: 500,
-  },
-  {
-    id: 'cut-1',
-    updatedAt: 0,
-    name: '減量1',
-    kind: 'cut',
-    startDate: '2027-02-01',
-    endDate: '2027-02-28',
-    startWeight: 75.5,
-    targetWeightMin: 73.7,
-    targetWeightMax: 74.0,
-    targetPacePerMonth: -1.5,
-    paceNote: '−1.5kg/月',
-    kcalOffsetMin: -400,
-    kcalOffsetMax: -500,
-  },
-  {
-    id: 'judge-1',
-    updatedAt: 0,
-    name: '判定',
-    kind: 'checkpoint',
-    startDate: '2027-02-28',
-    endDate: '2027-02-28',
-    startWeight: null,
-    targetWeightMin: null,
-    targetWeightMax: null,
-    targetPacePerMonth: null,
-    paceNote: '',
-    kcalOffsetMin: null,
-    kcalOffsetMax: null,
-  },
-]
-
-/** 5.4 の係数の初期値。10月までの残り約2.5サイクルで伸びが 1 : 0.8 : 0.7 と鈍る仮定 */
+/** 5.4 の係数。本命大会の日付が分からないときの値（残り約2.5サイクルで伸びが 1 : 0.8 : 0.7 と鈍る仮定） */
 export const DEFAULT_CYCLE_FACTORS = { requiredPaceFactor: 0.4, projectionMultiplier: 2.5 }
 
-/** 要件定義 1章の第1サイクル */
-export const DEFAULT_CYCLES: Cycle[] = [
-  {
-    id: 'cycle-1',
-    updatedAt: 0,
-    name: '第1サイクル',
-    baseDate: '2026-11-30',
-    baseWeight: 72.5,
-    baseTotal: null,
-    bulkEndDate: '2027-01-31',
-    cutEndDate: '2027-02-28',
-    ...DEFAULT_CYCLE_FACTORS,
-  },
-]
+/** 旧版の設定にあった項目 */
+interface LegacySettings {
+  standard74?: number
+  standard83?: number
+  route83TargetsKg?: number[]
+  route83Months?: number
+  dropNormalMaxKg?: number
+  dropGreyMaxKg?: number
+}
+
+/** 旧版の落ち幅の閾値(kg)を割合に直すときの、基準にするトータル(kg)。10kg → 2% */
+const LEGACY_DROP_REFERENCE_KG = 500
+
+/**
+ * 保存されている設定を今の形にそろえる。
+ * 新しい項目が無ければ初期値で補い、74kg級/83kg級が固定だった旧版の設定は
+ * 階級の名前や標準記録として読み替える（判定の内容は変えない）。
+ */
+export function normalizeSettings(raw: Partial<Settings> | undefined): Settings {
+  if (!raw) return DEFAULT_SETTINGS
+  const old = raw as Partial<Settings> & LegacySettings
+  const legacy: Partial<Settings> =
+    old.standard74 !== undefined && raw.goalTotal === undefined
+      ? {
+          goalTotal: old.standard74,
+          classChoice: true,
+          lowerClassName: '74kg級',
+          upperClassName: '83kg級',
+          upperClassStandard: old.standard83 ?? null,
+          upperLandingTargetsKg: old.route83TargetsKg ?? [],
+          upperRouteMonths: old.route83Months ?? null,
+          classNote: '74級は体脂肪11〜12%を維持、83級は大会時に約17%',
+          dropNormalMaxPct: ((old.dropNormalMaxKg ?? 10) / LEGACY_DROP_REFERENCE_KG) * 100,
+          dropGreyMaxPct: ((old.dropGreyMaxKg ?? 15) / LEGACY_DROP_REFERENCE_KG) * 100,
+        }
+      : {}
+  return {
+    ...DEFAULT_SETTINGS,
+    ...legacy,
+    ...raw,
+    show: { ...DEFAULT_SETTINGS.show, ...raw.show },
+  }
+}

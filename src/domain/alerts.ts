@@ -58,7 +58,7 @@ export function computeAlerts(
 ): Alert[] {
   const out: Alert[] = []
 
-  const bf = avgBodyFatInWindow(logs, asOf)
+  const bf = s.show.bodyFat ? avgBodyFatInWindow(logs, asOf) : null
   if (bf !== null && bf > s.bodyFatLimitPct) {
     out.push({
       id: 'bodyFatOver',

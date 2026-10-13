@@ -295,6 +295,7 @@ export function ChartSet({ data, from, to, compact }: { data: Data; from: ISODat
         <DataTable {...week} series={LIFT_TABLE} xLabel="週" />
       </div>
 
+      {data.settings.show.waist && (
       <div className="card">
         <h2>ウエスト周径（cm）</h2>
         <Chart {...week} series={WAIST} unit="cm" height={h(170)} />
@@ -303,6 +304,7 @@ export function ChartSet({ data, from, to, compact }: { data: Data; from: ISODat
         <div className="muted">体重が増えてもウエストが増えていなければ、脂肪より除脂肪が増えている目安。</div>
         <DataTable {...week} series={[WAIST[0], WEIGHT[0]]} xLabel="週" />
       </div>
+      )}
     </>
   )
 }
