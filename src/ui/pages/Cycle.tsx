@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { put } from '../../db/db'
 import type { ResolvedCycle } from '../../domain/cycles'
 import { judge, type Judgement as J } from '../../domain/judgement'
+import { phasePace } from '../../domain/phasePlan'
 import { summarizeCycle, type CycleSummary, type PhaseSummary } from '../../domain/summary'
 import { LIFTS, type Cycle as CycleT, type Settings } from '../../domain/types'
 import { shortDate, todayISO } from '../../domain/weeks'
@@ -28,7 +29,7 @@ export function storedCycle(c: ResolvedCycle): Omit<CycleT, 'updatedAt' | 'delet
 }
 
 function PhaseRows({ p, s }: { p: PhaseSummary; s: Settings }) {
-  const plan = p.phase.targetPacePerMonth
+  const plan = phasePace(p.phase)
   return (
     <>
       <tr>

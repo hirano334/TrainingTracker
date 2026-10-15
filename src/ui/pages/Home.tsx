@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { computeAlerts } from '../../domain/alerts'
 import { phaseAt, targetWeightOf } from '../../domain/phases'
+import { kcalCorrection, paceLabel, phaseKcal, phasePace } from '../../domain/phasePlan'
 import { weeklySeries } from '../../domain/series'
 import { addDays, diffDays, shortDate, todayISO, weekStart } from '../../domain/weeks'
 import { latestPace, weeklyWeights, weekTarget } from '../../domain/weight'
@@ -66,10 +67,11 @@ export function Home({ data }: { data: Data }) {
 
   const { phase, week, target, pace, strength } = v
   const s = data.settings
-  const kcal =
-    phase && s.maintenanceKcal !== null && phase.kcalOffsetMin !== null && phase.kcalOffsetMax !== null
-      ? [s.maintenanceKcal + phase.kcalOffsetMin, s.maintenanceKcal + phase.kcalOffsetMax].sort((a, b) => a - b)
-      : null
+  const kcal = phase ? phaseKcal(phase, s) : null
+  const correction = phase && s.show.nutrition ? kcalCorrection(phase, data.dailyLogs, today, s) : null
+  const planPace = phase ? phasePace(phase) : null
+  const range = (a: number, b: number) => (a === b ? f0(a) : `${f0(a)}〜${f0(b)}`)
+  const offset = (x: number) => `${x >= 0 ? '+' : '−'}${f0(Math.abs(x))}`
   const phaseTarget = phase ? targetWeightOf(phase) : null
 
   return (
@@ -92,16 +94,28 @@ export function Home({ data }: { data: Data }) {
             <div className="sub">
               {phase.startDate ? shortDate(phase.startDate) : ''}〜{shortDate(phase.endDate)}
               {phaseTarget !== null && `　目標 ${f1(phaseTarget)}kg`}
-              {phase.paceNote && `（${phase.paceNote}）`}
+              {planPace !== null && `（${paceLabel(planPace)}）`}
             </div>
             {s.show.nutrition && (
             <div className="sub">
               カロリー目安：
-              {kcal
-                ? `${kcal[0]}〜${kcal[1]} kcal`
-                : phase.kcalOffsetMin !== null
-                  ? `維持${signed(phase.kcalOffsetMin, 0)}〜${f0(Math.abs(phase.kcalOffsetMax ?? 0))}（維持カロリー未入力）`
-                  : '—'}
+              {!kcal
+                ? '—'
+                : s.maintenanceKcal !== null
+                  ? `1日 ${range(s.maintenanceKcal + kcal.min, s.maintenanceKcal + kcal.max)} kcal（維持${offset(kcal.min)}${kcal.min !== kcal.max ? `〜${offset(kcal.max)}` : ''}）`
+                  : `維持${offset(kcal.min)}${kcal.min !== kcal.max ? `〜${offset(kcal.max)}` : ''} kcal（維持カロリー未入力）`}
+              {correction?.status === 'ok' && (
+                <div>
+                  {correction.kcal === 0 ? (
+                    '計画どおりのペースです'
+                  ) : (
+                    <b style={{ color: 'var(--text)' }}>
+                      今のペース（{paceLabel(correction.actual)}）だと、1日 {offset(correction.kcal)} kcal
+                    </b>
+                  )}
+                </div>
+              )}
+              {correction?.status === 'wait' && <div className="muted">{correction.reason}</div>}
             </div>
             )}
           </>
@@ -167,7 +181,7 @@ export function Home({ data }: { data: Data }) {
             </div>
             <div className="muted">
               {pace ? `${shortDate(pace.weekStart)}の週 − 前の週` : '2週ぶんの記録が必要'}
-              {phase?.targetPacePerMonth != null && `／目標 ${signed(phase.targetPacePerMonth)}`}
+              {planPace !== null && `／計画 ${signed(planPace)}`}
             </div>
           </div>
         </div>

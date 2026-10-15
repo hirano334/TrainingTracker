@@ -1,6 +1,7 @@
 import { checkpointTotals, weeklyE1rm, weeklyTotal } from './e1rm'
 import { resolveFormula } from './formulas'
 import { phaseAt } from './phases'
+import { phasePace } from './phasePlan'
 import type { DailyLog, ISODate, Phase, Settings, TopSet } from './types'
 import { addDays, weekStart } from './weeks'
 import { avgBodyFatInWindow, latestPace } from './weight'
@@ -14,6 +15,7 @@ export interface Alert {
 }
 
 const f1 = (x: number) => x.toFixed(1)
+const signedKg = (x: number) => `${x < 0 ? '−' : '+'}${Math.abs(x).toFixed(1)}kg`
 
 /**
  * 減量期のトータルe1RMが2週続けて閾値以上低下しているか。
@@ -70,29 +72,37 @@ export function computeAlerts(
   const phase = phaseAt(phases, asOf)
   const pace = latestPace(logs, asOf)
 
+  // 計画ペースがあればその前後の幅で、無い旧いフェーズは固定の閾値で見る
+  const plan = phase ? phasePace(phase) : null
+  const tol = s.paceToleranceKgPerMonth
+  const bulkMax = plan !== null ? plan + tol : s.bulkPaceMaxPerMonth
+  const bulkMin = plan !== null ? plan - tol : s.bulkPaceMinPerMonth
+  // 減量は減少量（正の値）で比べる
+  const cutMax = plan !== null ? -plan + tol : s.cutPaceMaxPerMonth
+  const planNote = plan !== null ? `計画 ${signedKg(plan)} ±${f1(tol)}` : null
+
   if (phase?.kind === 'bulk' && pace) {
-    if (pace.perMonth > s.bulkPaceMaxPerMonth) {
+    if (pace.perMonth > bulkMax) {
       out.push({
         id: 'bulkTooFast',
         title: '脂肪が増えすぎ',
-        detail: `ペース +${f1(pace.perMonth)}kg/月（上限 ${f1(s.bulkPaceMaxPerMonth)}）`,
+        detail: `ペース ${signedKg(pace.perMonth)}/月（${planNote ?? `上限 ${f1(bulkMax)}`}）`,
       })
-    } else if (pace.perMonth < s.bulkPaceMinPerMonth) {
+    } else if (pace.perMonth < bulkMin) {
       out.push({
         id: 'bulkTooSlow',
         title: '筋肥大のペース不足',
-        detail: `ペース ${pace.perMonth >= 0 ? '+' : ''}${f1(pace.perMonth)}kg/月（下限 ${f1(s.bulkPaceMinPerMonth)}）`,
+        detail: `ペース ${signedKg(pace.perMonth)}/月（${planNote ?? `下限 ${f1(bulkMin)}`}）`,
       })
     }
   }
 
   if (phase?.kind === 'cut') {
-    // 減量期は減少量を正の値として閾値と比べる
-    if (pace && -pace.perMonth > s.cutPaceMaxPerMonth) {
+    if (pace && -pace.perMonth > cutMax) {
       out.push({
         id: 'cutTooFast',
         title: '筋肉の損失リスク',
-        detail: `ペース −${f1(-pace.perMonth)}kg/月（上限 ${f1(s.cutPaceMaxPerMonth)}）`,
+        detail: `ペース ${signedKg(pace.perMonth)}/月（${planNote ?? `上限 ${f1(cutMax)}`}）`,
       })
     }
     const d = e1rmDroppedTwoWeeks(s, phase, sets, asOf)

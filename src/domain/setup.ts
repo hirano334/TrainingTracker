@@ -1,7 +1,8 @@
 import { DEFAULT_CYCLE_FACTORS } from './defaults'
 import { suggestFactors } from './planning'
 import type { Cycle, ISODate, Phase, Settings, ShowFlags } from './types'
-import { addDays, diffDays } from './weeks'
+import { addDays } from './weeks'
+import { paceLabel, planPhase, type PaceLevel, type PhasePlan } from './phasePlan'
 
 /** 初回セットアップで聞くこと */
 export interface SetupAnswers {
@@ -22,9 +23,9 @@ export interface SetupAnswers {
   baseDate: ISODate
   bulkWeeks: number
   cutWeeks: number
-  /** 増量・減量のペース (kg/月)。どちらも正の値 */
-  bulkPerMonth: number
-  cutPerMonth: number
+  /** 増量・減量の増減幅（よくある幅から選ぶ） */
+  bulkLevel: PaceLevel
+  cutLevel: PaceLevel
   show: ShowFlags
 }
 
@@ -36,42 +37,36 @@ export interface SetupPlan {
   cycle: New<Cycle>
 }
 
-const r1 = (x: number) => Math.round(x * 10) / 10
-const signed = (x: number) => `${x < 0 ? '−' : '+'}${Math.abs(x)}kg/月`
-
 /** 答えから、設定・フェーズ表（増量 → 減量）・最初のサイクルを作る */
 export function buildSetup(a: SetupAnswers): SetupPlan {
-  const bulkStart = addDays(a.baseDate, 1)
-  const bulkEnd = addDays(a.baseDate, a.bulkWeeks * 7)
-  const cutStart = addDays(bulkEnd, 1)
-  const cutEnd = addDays(bulkEnd, a.cutWeeks * 7)
-  const perDay = 1 / (365.25 / 12)
-  const bulkTarget = r1(a.weight + a.bulkPerMonth * diffDays(a.baseDate, bulkEnd) * perDay)
-  const cutTarget = r1(bulkTarget - a.cutPerMonth * diffDays(bulkEnd, cutEnd) * perDay)
+  const bulk = planPhase({
+    kind: 'bulk',
+    startDate: addDays(a.baseDate, 1),
+    startWeight: a.weight,
+    how: { mode: 'preset', level: a.bulkLevel, weeks: a.bulkWeeks },
+  }) as PhasePlan
+  const cut = planPhase({
+    kind: 'cut',
+    startDate: addDays(bulk.endDate, 1),
+    startWeight: bulk.targetWeight,
+    how: { mode: 'preset', level: a.cutLevel, weeks: a.cutWeeks },
+  }) as PhasePlan
+  const cutEnd = cut.endDate
 
-  const phase = (
-    id: string,
-    name: string,
-    kind: 'bulk' | 'cut',
-    startDate: ISODate,
-    endDate: ISODate,
-    startWeight: number,
-    target: number,
-    pace: number,
-  ): New<Phase> => ({
+  // カロリーの目安は保存せず、ペースから自動で出す（phasePlan.ts の phaseKcal）
+  const phase = (id: string, name: string, kind: 'bulk' | 'cut', p: PhasePlan): New<Phase> => ({
     id,
     name,
     kind,
-    startDate,
-    endDate,
-    startWeight,
-    targetWeightMin: target,
-    targetWeightMax: target,
-    targetPacePerMonth: pace,
-    paceNote: signed(pace),
-    // 維持カロリーからの差の目安。1kg ≒ 7700kcal として月ペースから出し、50kcal 単位に丸めた幅
-    kcalOffsetMin: Math.round((pace * 7700) / 30.44 / 50) * 50 - Math.sign(pace) * 50,
-    kcalOffsetMax: Math.round((pace * 7700) / 30.44 / 50) * 50 + Math.sign(pace) * 50,
+    startDate: p.startDate,
+    endDate: p.endDate,
+    startWeight: p.startWeight,
+    targetWeightMin: p.targetWeight,
+    targetWeightMax: p.targetWeight,
+    targetPacePerMonth: p.pacePerMonth,
+    paceNote: paceLabel(p.pacePerMonth),
+    kcalOffsetMin: null,
+    kcalOffsetMax: null,
   })
 
   const dates = { baseDate: a.baseDate, cutEndDate: cutEnd }
@@ -94,8 +89,8 @@ export function buildSetup(a: SetupAnswers): SetupPlan {
       show: a.show,
     },
     phases: [
-      phase('bulk-1', '増量1', 'bulk', bulkStart, bulkEnd, a.weight, bulkTarget, a.bulkPerMonth),
-      phase('cut-1', '減量1', 'cut', cutStart, cutEnd, bulkTarget, cutTarget, -a.cutPerMonth),
+      phase('bulk-1', '増量1', 'bulk', bulk),
+      phase('cut-1', '減量1', 'cut', cut),
     ],
     cycle: {
       id: 'cycle-1',

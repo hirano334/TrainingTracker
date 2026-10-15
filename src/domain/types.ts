@@ -64,7 +64,9 @@ export interface Settings extends SyncMeta {
   /** 5.5 落ち幅の閾値。増量終了時のトータルに対する割合(%) */
   dropNormalMaxPct: number
   dropGreyMaxPct: number
-  /** 5.8 アラート閾値 (kg/月, %) */
+  /** 5.8 ペースの警告：フェーズの計画ペースから、この幅 (kg/月) を超えてずれたら警告する */
+  paceToleranceKgPerMonth: number
+  /** 5.8 アラート閾値 (kg/月, %)。計画ペースの無い旧いフェーズで使う */
   bulkPaceMaxPerMonth: number
   bulkPaceMinPerMonth: number
   cutPaceMaxPerMonth: number

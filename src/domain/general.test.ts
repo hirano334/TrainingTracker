@@ -5,6 +5,7 @@ import { judge } from './judgement'
 import { phaseAt, targetWeightOn } from './phases'
 import { gainWeight, monthsBetween, suggestFactors } from './planning'
 import { sampleData } from './sample'
+import { phaseKcal } from './phasePlan'
 import { buildSetup, type SetupAnswers } from './setup'
 import { resolveCycle, type ResolvedCycle } from './cycles'
 import type { Phase } from './types'
@@ -116,8 +117,8 @@ describe('初回セットアップ', () => {
     baseDate: '2026-12-27',
     bulkWeeks: 8,
     cutWeeks: 4,
-    bulkPerMonth: 1.5,
-    cutPerMonth: 1.5,
+    bulkLevel: 'standard',
+    cutLevel: 'slow',
     show: { waist: false, nutrition: true, bodyFat: false, checkpoint: true, heartRate: false },
   }
   const plan = buildSetup(answers)
@@ -131,17 +132,22 @@ describe('初回セットアップ', () => {
     expect(phaseAt(phases, '2027-02-21')?.id).toBe('bulk-1')
     expect(phaseAt(phases, '2027-02-22')?.id).toBe('cut-1')
   })
-  it('目標体重はペースと期間から出す', () => {
+  it('目標体重は選んだ増減幅と週数から出す', () => {
     const [bulk, cut] = phases
     expect(bulk.startWeight).toBe(65)
-    expect(bulk.targetWeightMin).toBeCloseTo(65 + (1.5 * 56) / 30.4375, 1) // 67.8
-    expect(cut.startWeight).toBe(bulk.targetWeightMin)
-    expect(cut.targetWeightMin).toBeCloseTo((bulk.targetWeightMin as number) - (1.5 * 28) / 30.4375, 1)
+    expect(bulk.targetWeightMin).toBe(67.6) // 65 × 0.5%/週 × 8週 = +2.6
+    expect(cut.startWeight).toBe(67.6)
+    expect(cut.targetWeightMin).toBe(66.2) // 67.6 × −0.5%/週 × 4週 = −1.35
     expect(targetWeightOn(bulk, '2026-12-27')).toBeCloseTo(65)
-    expect(bulk.targetPacePerMonth).toBe(1.5)
-    expect(cut.targetPacePerMonth).toBe(-1.5)
-    expect(bulk.kcalOffsetMin).toBeGreaterThan(0)
-    expect(cut.kcalOffsetMin).toBeLessThan(0)
+    expect(bulk.targetPacePerMonth).toBeCloseTo(2.6 / (56 / 30.4375))
+    expect(cut.targetPacePerMonth).toBeLessThan(0)
+  })
+  it('カロリーは保存せず、ペースから自動で出す', () => {
+    const [bulk, cut] = phases
+    expect(bulk.kcalOffsetMin).toBeNull()
+    expect(phaseKcal(bulk, EXAMPLE_SETTINGS)).toMatchObject({ auto: true })
+    expect(phaseKcal(bulk, EXAMPLE_SETTINGS)?.min).toBeGreaterThan(0)
+    expect(phaseKcal(cut, EXAMPLE_SETTINGS)?.min).toBeLessThan(0)
   })
   it('サイクルはフェーズと同じ日付で、係数は大会日から', () => {
     expect(plan.cycle).toMatchObject({ phaseIds: ['bulk-1', 'cut-1'], baseWeight: 65, baseTotal: 380 })

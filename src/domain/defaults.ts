@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   borderlineFactor: 0.5,
   dropNormalMaxPct: 2,
   dropGreyMaxPct: 3,
+  paceToleranceKgPerMonth: 0.5,
   bulkPaceMaxPerMonth: 2.0,
   bulkPaceMinPerMonth: 1.0,
   cutPaceMaxPerMonth: 2.0,

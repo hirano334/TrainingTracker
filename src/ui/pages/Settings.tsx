@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import { newId, put, remove } from '../../db/db'
+import { put } from '../../db/db'
 import { estimateMaintenance } from '../../domain/energy'
-import type { Phase, PhaseKind, Settings as SettingsT, ShowFlags } from '../../domain/types'
-import { addDays, todayISO } from '../../domain/weeks'
+import type { Settings as SettingsT, ShowFlags } from '../../domain/types'
+import { todayISO } from '../../domain/weeks'
 import { FILE_NAME } from '../../sync/drive'
 import { disableSync, enableSync, getClientId, syncNow } from '../../sync/syncEngine'
 import { DateField, NumField, Seg, TextField } from '../components/Fields'
 import { ago, f0, signed } from '../format'
 import { useSyncState, type Data } from '../useData'
+import { PhaseForm, PhaseRow } from './PhaseForm'
 import { CyclesCard, FormulaCard } from './SettingsCalc'
 import { Backup } from './SettingsData'
 
@@ -207,9 +208,11 @@ function Params({ data, toast }: Props) {
           <NumField label="「境界」の下限（×必要ペース）" value={d.borderlineFactor} onChange={num('borderlineFactor')} />
           <NumField label="落ち幅：正常の上限 %" value={Number(d.dropNormalMaxPct.toFixed(2))} onChange={num('dropNormalMaxPct')} />
           <NumField label="落ち幅：グレーの上限 %" value={Number(d.dropGreyMaxPct.toFixed(2))} onChange={num('dropGreyMaxPct')} />
-          <NumField label="増量ペース上限 kg/月" value={d.bulkPaceMaxPerMonth} onChange={num('bulkPaceMaxPerMonth')} />
-          <NumField label="増量ペース下限 kg/月" value={d.bulkPaceMinPerMonth} onChange={num('bulkPaceMinPerMonth')} />
-          <NumField label="減量ペース上限 kg/月" value={d.cutPaceMaxPerMonth} onChange={num('cutPaceMaxPerMonth')} />
+          <NumField
+            label="ペース警告の幅（計画±）kg/月"
+            value={d.paceToleranceKgPerMonth}
+            onChange={num('paceToleranceKgPerMonth')}
+          />
           <NumField label="e1RM低下の警告 %" value={d.e1rmDropAlertPct} onChange={num('e1rmDropAlertPct')} />
           {d.show.bodyFat && (
             <NumField label="体脂肪率の上限 %" value={d.bodyFatLimitPct} onChange={num('bodyFatLimitPct')} />
@@ -227,124 +230,27 @@ function Params({ data, toast }: Props) {
   )
 }
 
-const KINDS: { value: PhaseKind; label: string }[] = [
-  { value: 'bulk', label: '増量' },
-  { value: 'cut', label: '減量' },
-  { value: 'checkpoint', label: '判定（目印）' },
-]
-
-function PhaseEditor({ phase, toast }: { phase: Phase; toast: (m: string) => void }) {
-  const [d, setD] = useState(phase)
-  useEffect(() => setD(phase), [phase])
-  const set = <K extends keyof Phase>(k: K, v: Phase[K]) => setD((p) => ({ ...p, [k]: v }))
-  const dirty = JSON.stringify(d) !== JSON.stringify(phase)
-  const range =
-    d.targetWeightMin !== null
-      ? d.targetWeightMin === d.targetWeightMax || d.targetWeightMax === null
-        ? `→ ${d.targetWeightMin}kg`
-        : `→ ${d.targetWeightMin}〜${d.targetWeightMax}kg`
-      : ''
-  return (
-    <details>
-      <summary>
-        <b style={{ color: 'var(--text)' }}>{phase.name}</b>　{phase.startDate ?? ''}〜{phase.endDate}　{range}
-      </summary>
-      <div className="stack" style={{ margin: '8px 0 16px' }}>
-        <div className="grid2">
-          <TextField label="名前" value={d.name} onChange={(v) => set('name', v)} />
-          <label className="field">
-            <span>種別</span>
-            <select value={d.kind} onChange={(e) => set('kind', e.target.value as PhaseKind)}>
-              {/* 「判定」の目印は旧版のもの。既にある行でだけ選べる */}
-              {KINDS.filter((k) => k.value !== 'checkpoint' || phase.kind === 'checkpoint').map((k) => (
-                <option key={k.value} value={k.value}>
-                  {k.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <DateField label="開始日" value={d.startDate} onChange={(v) => set('startDate', v)} />
-          <DateField label="終了日" value={d.endDate} onChange={(v) => v && set('endDate', v)} />
-        </div>
-        {d.kind !== 'checkpoint' && (
-          <>
-            <div className="grid2" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
-              <NumField label="開始体重" value={d.startWeight} onChange={(v) => set('startWeight', v)} />
-              <NumField label="目標（下限）" value={d.targetWeightMin} onChange={(v) => set('targetWeightMin', v)} />
-              <NumField label="目標（上限）" value={d.targetWeightMax} onChange={(v) => set('targetWeightMax', v)} />
-            </div>
-            <div className="grid2">
-              <NumField
-                label="目標ペース kg/月（減量は負）"
-                value={d.targetPacePerMonth}
-                onChange={(v) => set('targetPacePerMonth', v)}
-              />
-              <TextField label="ペースの表示" value={d.paceNote} onChange={(v) => set('paceNote', v)} />
-              <NumField label="カロリー：維持との差（小）" value={d.kcalOffsetMin} onChange={(v) => set('kcalOffsetMin', v)} />
-              <NumField label="カロリー：維持との差（大）" value={d.kcalOffsetMax} onChange={(v) => set('kcalOffsetMax', v)} />
-            </div>
-          </>
-        )}
-        <div className="row">
-          <button
-            type="button"
-            className="btn grow"
-            disabled={!dirty || d.name.trim() === '' || (d.startDate !== null && d.startDate > d.endDate)}
-            onClick={async () => {
-              await put('phases', d)
-              toast('フェーズを保存しました')
-            }}
-          >
-            保存
-          </button>
-          <button
-            type="button"
-            className="btn danger"
-            onClick={async () => {
-              if (!confirm(`「${phase.name}」を削除しますか？`)) return
-              await remove('phases', phase.id)
-              toast('フェーズを削除しました')
-            }}
-          >
-            削除
-          </button>
-        </div>
-      </div>
-    </details>
-  )
-}
-
 function Phases({ data, toast }: Props) {
-  const add = async () => {
-    const last = data.phases.filter((p) => p.kind !== 'checkpoint').at(-1)
-    const start = last ? addDays(last.endDate, 1) : todayISO()
-    const from = last ? (last.targetWeightMax ?? last.targetWeightMin) : null
-    await put('phases', {
-      id: newId(),
-      name: '新しいフェーズ',
-      kind: last?.kind === 'bulk' ? 'cut' : 'bulk',
-      startDate: start,
-      endDate: addDays(start, 29),
-      startWeight: from,
-      targetWeightMin: from,
-      targetWeightMax: from,
-      targetPacePerMonth: null,
-      paceNote: '',
-      kcalOffsetMin: null,
-      kcalOffsetMax: null,
-    })
-    toast('フェーズを追加しました。内容を編集してください')
-  }
+  const [adding, setAdding] = useState(false)
   return (
     <div className="card">
       <h2>フェーズ表</h2>
-      <div className="muted">増量・減量の期間と目標体重。ホームの目標ラインとペースの警告に使います。下の「サイクル」で、振り返る単位にまとめます。</div>
+      <div className="muted">
+        増量・減量の期間と目標体重。増減幅を選ぶと、目標体重・ペース・カロリーを自動で出します。下の「サイクル」で、振り返る単位にまとめます。
+      </div>
       {data.phases.map((p) => (
-        <PhaseEditor key={p.id} phase={p} toast={toast} />
+        <PhaseRow key={p.id} data={data} phase={p} toast={toast} />
       ))}
-      <button type="button" className="btn" style={{ width: '100%', marginTop: 8 }} onClick={add}>
-        ＋ フェーズを追加
-      </button>
+      {adding ? (
+        <div style={{ borderTop: '1px solid var(--border)', marginTop: 8 }}>
+          <h2 style={{ marginTop: 12 }}>新しいフェーズ</h2>
+          <PhaseForm data={data} toast={toast} onDone={() => setAdding(false)} />
+        </div>
+      ) : (
+        <button type="button" className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => setAdding(true)}>
+          ＋ フェーズを追加
+        </button>
+      )}
     </div>
   )
 }

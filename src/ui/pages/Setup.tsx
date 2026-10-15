@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
 import { importJSON } from '../../db/backup'
 import { put, putMany, setMeta, SETUP_DONE } from '../../db/db'
+import { PACE_PRESETS, type PaceLevel, type PlannedKind } from '../../domain/phasePlan'
 import { buildSetup } from '../../domain/setup'
 import type { ShowFlags } from '../../domain/types'
 import { shortDate, todayISO } from '../../domain/weeks'
-import { DateField, NumField, TextField } from '../components/Fields'
+import { DateField, NumField, Seg, TextField } from '../components/Fields'
 import { Stepper } from '../components/Stepper'
 import { f1 } from '../format'
 import type { Data } from '../useData'
@@ -38,16 +39,16 @@ export function Setup({ data, toast }: { data: Data; toast: (m: string) => void 
   const [baseDate, setBaseDate] = useState(todayISO())
   const [bulkWeeks, setBulkWeeks] = useState<number | null>(8)
   const [cutWeeks, setCutWeeks] = useState<number | null>(4)
-  const [bulkPerMonth, setBulkPace] = useState<number | null>(1.5)
-  const [cutPerMonth, setCutPace] = useState<number | null>(1.5)
+  const [bulkLevel, setBulkLevel] = useState<PaceLevel>('standard')
+  const [cutLevel, setCutLevel] = useState<PaceLevel>('slow')
   const [show, setShow] = useState<ShowFlags>(data.settings.show)
 
   const missing = [
     (weight === null || weight <= 0) && 'いまの体重',
     (goalTotal === null || goalTotal <= 0) && '目標トータル',
     classChoice && (lowerClassName.trim() === '' || upperClassName.trim() === '') && '階級の名前',
-    (!bulkWeeks || bulkWeeks < 1 || !cutWeeks || cutWeeks < 1) && '増量・減量の週数',
-    (!bulkPerMonth || bulkPerMonth <= 0 || !cutPerMonth || cutPerMonth <= 0) && '増量・減量のペース',
+    (!bulkWeeks || bulkWeeks < 1 || !Number.isInteger(bulkWeeks) || !cutWeeks || cutWeeks < 1 || !Number.isInteger(cutWeeks)) &&
+      '増量・減量の週数（整数）',
   ].filter((x): x is string => typeof x === 'string')
 
   const plan = useMemo(
@@ -67,13 +68,13 @@ export function Setup({ data, toast }: { data: Data; toast: (m: string) => void 
             baseDate,
             bulkWeeks: bulkWeeks as number,
             cutWeeks: cutWeeks as number,
-            bulkPerMonth: bulkPerMonth as number,
-            cutPerMonth: cutPerMonth as number,
+            bulkLevel,
+            cutLevel,
             show,
           }),
     // missing は下の値から決まる
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [weight, goalTotal, baseTotal, mainMeetDate, classChoice, lowerClassName, upperClassName, upperClassStandard, landing, baseDate, bulkWeeks, cutWeeks, bulkPerMonth, cutPerMonth, show],
+    [weight, goalTotal, baseTotal, mainMeetDate, classChoice, lowerClassName, upperClassName, upperClassStandard, landing, baseDate, bulkWeeks, cutWeeks, bulkLevel, cutLevel, show],
   )
 
   const start = async () => {
@@ -140,11 +141,11 @@ export function Setup({ data, toast }: { data: Data; toast: (m: string) => void 
         <h2>最初のサイクル</h2>
         <DateField label="基準日（この翌日から増量）" value={baseDate} onChange={(v) => v && setBaseDate(v)} />
         <div className="grid2">
-          <NumField label="増量 週数" value={bulkWeeks} onChange={setBulkWeeks} />
-          <NumField label="増量ペース kg/月" value={bulkPerMonth} onChange={setBulkPace} />
-          <NumField label="減量 週数" value={cutWeeks} onChange={setCutWeeks} />
-          <NumField label="減量ペース kg/月" value={cutPerMonth} onChange={setCutPace} />
+          <NumField label="増量 週数" value={bulkWeeks} onChange={setBulkWeeks} step="1" />
+          <NumField label="減量 週数" value={cutWeeks} onChange={setCutWeeks} step="1" />
         </div>
+        <LevelPicker kind="bulk" value={bulkLevel} onChange={setBulkLevel} />
+        <LevelPicker kind="cut" value={cutLevel} onChange={setCutLevel} />
         {plan && (
           <table className="kv">
             <tbody>
@@ -219,5 +220,34 @@ export function Setup({ data, toast }: { data: Data; toast: (m: string) => void 
         </button>
       </div>
     </>
+  )
+}
+
+/** よくある増減幅から選ぶ */
+function LevelPicker(props: { kind: PlannedKind; value: PaceLevel; onChange: (v: PaceLevel) => void }) {
+  const presets = PACE_PRESETS[props.kind]
+  return (
+    <div>
+      <span className="label">{props.kind === 'bulk' ? '増量の幅' : '減量の幅'}</span>
+      <Seg
+        options={presets.map((p) => p.level)}
+        value={props.value}
+        onChange={props.onChange}
+        label={props.kind === 'bulk' ? '増量の幅' : '減量の幅'}
+        render={(l) => {
+          const p = presets.find((x) => x.level === l)!
+          return (
+            <span style={{ lineHeight: 1.2 }}>
+              {p.label}
+              <br />
+              <small style={{ fontWeight: 500 }}>
+                {p.pctPerWeek > 0 ? '+' : '−'}
+                {Math.abs(p.pctPerWeek)}%/週
+              </small>
+            </span>
+          )
+        }}
+      />
+    </div>
   )
 }
