@@ -83,7 +83,7 @@ export function Setup({ data, toast }: { data: Data; toast: (m: string) => void 
     await putMany('phases', plan.phases)
     await put('cycles', plan.cycle)
     await setMeta(SETUP_DONE, true)
-    toast('設定を作りました。あとから設定画面で変えられます')
+    toast('設定を作りました。あとから計画タブで変えられます')
   }
 
   return (
@@ -93,7 +93,7 @@ export function Setup({ data, toast }: { data: Data; toast: (m: string) => void 
       </div>
       <div className="card sub">
         増量と減量を1サイクルとして、体重と SQ・BP・DL のトップセットを記録し、目標トータルに届くペースかを判定するアプリです。
-        最初の計画を作るために、いくつか教えてください。あとから設定画面で全部変えられます。
+        最初の計画を作るために、いくつか教えてください。あとから計画タブと設定で全部変えられます。
       </div>
 
       <div className="card stack">
@@ -108,7 +108,7 @@ export function Setup({ data, toast }: { data: Data; toast: (m: string) => void 
         <div>
           <NumField label="いまのトータル kg（分かれば）" value={baseTotal} onChange={setBaseTotal} placeholder="あとで入れる" />
           <div className="muted">
-            空欄でも始められます。2週間ほど記録すると、設定のサイクルで記録から計算した値を入れられます。
+            空欄でも始められます。2週間ほど記録すると、計画タブのサイクルで記録から計算した値を入れられます。
           </div>
         </div>
         <DateField label="本命大会の日付（分かれば）" value={mainMeetDate} onChange={setMeet} />
@@ -216,7 +216,7 @@ export function Setup({ data, toast }: { data: Data; toast: (m: string) => void 
           }}
         />
         <button type="button" className="btn" style={{ width: '100%' }} onClick={() => void setMeta(SETUP_DONE, true)}>
-          スキップ（設定画面で自分で入れる／Drive と同期する）
+          スキップ（計画タブで自分で入れる／Drive と同期する）
         </button>
       </div>
     </>

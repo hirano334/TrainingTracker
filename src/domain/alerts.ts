@@ -110,7 +110,7 @@ export function computeAlerts(
       out.push({
         id: 'e1rmDropping',
         title: '減量ペースの見直し',
-        detail: `トータルe1RMが2週続けて${s.e1rmDropAlertPct}%以上低下（減量前 ${f1(d.ref)} → ${f1(d.weeks[0])}, ${f1(d.weeks[1])}）`,
+        detail: `推定トータルが2週続けて${s.e1rmDropAlertPct}%以上低下（減量前 ${f1(d.ref)} → ${f1(d.weeks[0])}, ${f1(d.weeks[1])}）`,
       })
     }
   }

@@ -59,7 +59,7 @@ function PhaseRows({ p, s }: { p: PhaseSummary; s: Settings }) {
           </tr>
           <tr>
             <th>
-              トータルe1RM
+              推定トータル
               <div className="muted">
                 {f1(p.totalStart)} → {f1(p.totalEnd)} kg
               </div>
@@ -241,7 +241,7 @@ function Compare({ rows, s }: { rows: { j: J; sum: CycleSummary }[]; s: Settings
               <th>減量 kg/月</th>
               <th>減量の落ち幅</th>
               {s.show.nutrition && <th>維持kcal</th>}
-              <th>判定①</th>
+              <th>目標へのペース</th>
               {s.classChoice && <th>階級</th>}
             </tr>
           </thead>
@@ -269,7 +269,7 @@ function Compare({ rows, s }: { rows: { j: J; sum: CycleSummary }[]; s: Settings
         </table>
       </div>
       <div className="muted" style={{ marginTop: 6 }}>
-        落ち幅の判定：{Object.values(DROP).map((d) => d.short).join('／')}は各サイクルの判定②を参照。
+        落ち幅の判定：{Object.values(DROP).map((d) => d.short).join('／')}は各サイクルの「減量での落ち幅」を参照。
       </div>
     </div>
   )
@@ -305,7 +305,7 @@ export function Cycle(props: { data: Data; toast: (m: string) => void; openRepor
           <h1>サイクル</h1>
         </div>
         <div className="card sub">
-          サイクルがありません。設定の「サイクル」で、まとめて振り返りたいフェーズ（増量・減量）を選んでください。
+          サイクルがありません。計画タブの「サイクル」で、まとめて振り返りたいフェーズ（増量・減量）を選んでください。
         </div>
       </>
     )

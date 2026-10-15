@@ -84,8 +84,8 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
       {(j.pace === null || (c.dropRefDate !== null && j.dropVerdict === null)) && (
         <div className="card sub">
           <b style={{ color: 'var(--text)' }}>判定に足りないもの</b>
-          {s.goalTotal === null && <div>・目標トータルが未入力（設定のパラメータ）</div>}
-          {c.baseTotal === null && <div>・基準トータルが未入力（設定のサイクル）</div>}
+          {s.goalTotal === null && <div>・目標トータルが未入力（計画タブの目標）</div>}
+          {c.baseTotal === null && <div>・基準トータルが未入力（計画タブのサイクル）</div>}
           {j.now.total === null && <div>・直近2週に SQ・BP・DL の試合基準のセットが必要</div>}
           {j.weekAvgWeight === null && <div>・直近7日の体重が必要</div>}
           {c.dropRefDate !== null && j.drop === null && j.now.total !== null && (
@@ -96,7 +96,7 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
 
       <div className="card">
         <div className="row between">
-          <h2 style={{ margin: 0 }}>判定① 伸びのペース</h2>
+          <h2 style={{ margin: 0 }}>目標へのペース</h2>
           <Badge v={j.pace && PACE[j.pace]} />
         </div>
         <table className="kv" style={{ marginTop: 8 }}>
@@ -107,7 +107,7 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
             </tr>
             <tr>
               <th>
-                トータルe1RM
+                推定トータル
                 <div className="muted">{lifts(j.now)}</div>
               </th>
               <td>{f1(j.now.total)} kg</td>
@@ -165,20 +165,20 @@ export function JudgementCards({ j, data }: { j: J; data: Data }) {
       {c.dropRefDate !== null && (
       <div className="card">
         <div className="row between wrap">
-          <h2 style={{ margin: 0 }}>判定② 減量による落ち幅</h2>
+          <h2 style={{ margin: 0 }}>減量での落ち幅</h2>
           <Badge v={j.dropVerdict && dropBadge(j.dropVerdict, s)} />
         </div>
         <table className="kv" style={{ marginTop: 8 }}>
           <tbody>
             <tr>
               <th>
-                トータルe1RM（{c.dropRefDate ? shortDate(c.dropRefDate) : '—'}）
+                推定トータル（{c.dropRefDate ? shortDate(c.dropRefDate) : '—'}）
                 <div className="muted">{lifts(j.atBulkEnd)}</div>
               </th>
               <td>{f1(j.atBulkEnd?.total)} kg</td>
             </tr>
             <tr>
-              <th>トータルe1RM（{shortDate(j.evalDate)}）</th>
+              <th>推定トータル（{shortDate(j.evalDate)}）</th>
               <td>{f1(j.now.total)} kg</td>
             </tr>
             <tr>

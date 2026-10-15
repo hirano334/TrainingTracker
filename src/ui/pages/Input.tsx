@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { newId, put, remove } from '../../db/db'
-import { brokenRecords, RECORD_REPS, records } from '../../domain/records'
+import { brokenRecords } from '../../domain/records'
 import { LIFTS, type Lift, type TableName } from '../../domain/types'
 import { shortDate, todayISO, weekStart } from '../../domain/weeks'
 import { DateField, NumField, Seg, TextField } from '../components/Fields'
@@ -20,17 +20,20 @@ interface FormProps {
   toast: (msg: string) => void
 }
 
-export function Input({ data, toast }: FormProps) {
+/** ホームなどから、項目を指定して開くときの名前 */
+const KIND_OF: Record<string, Kind> = { weight: '体重', set: 'トレ', waist: 'ウエスト', checkpoint: '測定' }
+
+export function Input({ data, toast, sub }: FormProps & { sub?: string | null }) {
   const today = todayISO()
   const show = data.settings.show
   // 朝はまず体重。今日の体重が入っていればトレーニングから
-  const [kind, setKind] = useState<Kind>(() =>
-    data.dailyLogs.some((l) => l.date === today) ? 'トレ' : '体重',
+  const [kind, setKind] = useState<Kind>(
+    () => (sub ? KIND_OF[sub] : undefined) ?? (data.dailyLogs.some((l) => l.date === today) ? 'トレ' : '体重'),
   )
   return (
     <>
       <div className="page-head">
-        <h1>入力</h1>
+        <h1>記録</h1>
       </div>
       <Seg
         options={KINDS.filter((k) => (k !== 'ウエスト' || show.waist) && (k !== '測定' || show.checkpoint))}
@@ -206,7 +209,6 @@ function SetForm({ data, toast }: FormProps) {
     )
     reset()
   }
-  const best = records(data.topSets, e1rm)
 
   return (
     <>
@@ -254,36 +256,6 @@ function SetForm({ data, toast }: FormProps) {
           </button>
         )}
       </div>
-      <div className="card">
-        <h2>自己ベスト</h2>
-        <div className="scroll-x">
-          <table className="data">
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left' }}>種目</th>
-                <th>e1RM</th>
-                {RECORD_REPS.map((r) => (
-                  <th key={r}>{r}回</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {LIFTS.map((l) => (
-                <tr key={l}>
-                  <td style={{ textAlign: 'left' }}>
-                    <b>{l}</b>
-                  </td>
-                  <td>{f1(best[l].bestE1rm?.value)}</td>
-                  {RECORD_REPS.map((r) => (
-                    <td key={r}>{best[l].byReps[r]?.weight ?? '—'}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="muted">試合基準で挙げたセットのみ。回数の列はその回数での最高重量(kg)。</div>
-      </div>
       <Recent
         title="直近のセット"
         rows={data.topSets.slice(-10).reverse()}
@@ -306,7 +278,7 @@ function SetForm({ data, toast }: FormProps) {
             {shortDate(s.date)}　<b>{s.lift}</b>　{s.weight}kg × {s.reps}　RPE{s.rpe}
             {!s.comp && '　×'}
             <span className="muted" style={{ display: 'block' }}>
-              e1RM {f1(e1rm(s.weight, s.reps, s.rpe))}
+              推定1RM {f1(e1rm(s.weight, s.reps, s.rpe))}
             </span>
           </>
         )}

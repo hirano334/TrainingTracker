@@ -283,7 +283,7 @@ export function ChartSet({ data, from, to, compact }: { data: Data; from: ISODat
       </div>
 
       <div className="card">
-        <h2>トータルe1RM（kg）</h2>
+        <h2>推定トータル（kg）</h2>
         <Chart {...week} series={TOTAL} unit="kg" height={h(220)} />
         <div className="muted">
           {data.formula.formula.name}。記録のない種目は直前2週以内の値を引き継いで合計。試合基準×のセットは含まない。
@@ -293,7 +293,7 @@ export function ChartSet({ data, from, to, compact }: { data: Data; from: ISODat
       </div>
 
       <div className="card">
-        <h2>種目別e1RM（kg）</h2>
+        <h2>種目別の推定1RM（kg）</h2>
         <Chart {...week} series={LIFT_SERIES} unit="kg" height={h(260)} />
         <div className="muted">その週の最大値。試合基準×のセットは表にだけ出す。</div>
         <DataTable {...week} series={LIFT_TABLE} xLabel="週" />

@@ -102,7 +102,8 @@ function CsvImport({ toast }: { toast: (m: string) => void }) {
   )
 }
 
-export function Backup({ data, toast }: SettingsProps) {
+/** 設定 > データの書き出し・読み込み */
+export function DataPage({ data, toast }: SettingsProps) {
   const file = useRef<HTMLInputElement>(null)
   const lastBackupAt = useMeta<number>('lastBackupAt')
   const today = todayISO()
@@ -110,7 +111,8 @@ export function Backup({ data, toast }: SettingsProps) {
   return (
     <>
       <div className="card stack">
-        <h2>記録（入力した値）</h2>
+        <h2>記録のバックアップ</h2>
+        <div className="muted">入力した記録と設定をまとめて保存します。機種変更や、別の端末への移し替えに使います。</div>
         <div className="sub">最終バックアップ：{ago(lastBackupAt)}</div>
         <div className="grid2">
           <button
@@ -163,7 +165,7 @@ export function Backup({ data, toast }: SettingsProps) {
       </div>
 
       <div className="card stack">
-        <h2>結果（計算した値）</h2>
+        <h2>計算結果の書き出し</h2>
         <div className="sub">
           週ごとの値・判定・アラート・自己ベストと、計算に使った式（{data.formula.formula.name}）や設定をまとめて書き出します。
         </div>
@@ -191,8 +193,14 @@ export function Backup({ data, toast }: SettingsProps) {
         <div className="muted">結果のファイルは記録の代わりにはなりません（読み込みには使えません）。</div>
       </div>
 
-      <div className="card stack">
-        <h2>この端末</h2>
+    </>
+  )
+}
+
+/** 設定 > この端末 */
+export function DevicePage({ toast }: Pick<SettingsProps, 'toast'>) {
+  return (
+    <div className="card stack">
         {import.meta.env.DEV && (
           <button
             type="button"
@@ -222,6 +230,5 @@ export function Backup({ data, toast }: SettingsProps) {
           この端末の記録を全消去
         </button>
       </div>
-    </>
   )
 }

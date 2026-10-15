@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { newId, put, remove } from '../../db/db'
 import { resolveCycle, usablePhases } from '../../domain/cycles'
 import { DEFAULT_CYCLE_FACTORS } from '../../domain/defaults'
@@ -67,7 +67,6 @@ export function FormulaCard({ data, toast }: SettingsProps) {
 
   return (
     <div className="card stack">
-      <h2>推定1RMの式</h2>
       {data.formula.fallbackReason && (
         <div className="sub" role="alert" style={{ color: 'var(--critical)' }}>
           {data.formula.fallbackReason}。Epley で計算しています。
@@ -321,7 +320,7 @@ function CycleEditor({ cycle, data, toast }: SettingsProps & { cycle: Draft }) {
   )
 }
 
-export function CyclesCard({ data, toast }: SettingsProps) {
+export function CyclesCard({ data, toast, header }: SettingsProps & { header?: ReactNode }) {
   const drafts: Draft[] = [...data.cycles.map(storedCycle), ...data.unresolvedCycles]
   const add = async () => {
     // まだどのサイクルにも入っていないフェーズを、新しいサイクルの候補にする
@@ -344,10 +343,9 @@ export function CyclesCard({ data, toast }: SettingsProps) {
   }
   return (
     <div className="card">
-      <h2>サイクル</h2>
+      {header ?? <h2>サイクル</h2>}
       <div className="muted">
-        フェーズ表のフェーズを選んで、まとめて振り返る単位（サイクル）にします。日付はフェーズから決まります。
-        グラフの体重補正は、最初のサイクルの基準体重（{f1(data.refWeight)}kg）に換算します。
+        日付はフェーズから決まります。グラフの体重補正は、最初のサイクルの基準体重（{f1(data.refWeight)}kg）に換算します。
       </div>
       {drafts.map((c) => (
         <CycleEditor key={c.id} cycle={c} data={data} toast={toast} />

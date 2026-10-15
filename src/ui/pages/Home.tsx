@@ -7,6 +7,7 @@ import { addDays, diffDays, shortDate, todayISO, weekStart } from '../../domain/
 import { latestPace, weeklyWeights, weekTarget } from '../../domain/weight'
 import { syncNow } from '../../sync/syncEngine'
 import { ago, f0, f1, signed } from '../format'
+import { navigate } from '../route'
 import { useMeta, useSyncState, type Data } from '../useData'
 
 const KIND_LABEL = { bulk: '増量期', cut: '減量期', checkpoint: '判定' } as const
@@ -120,13 +121,38 @@ export function Home({ data }: { data: Data }) {
             )}
           </>
         ) : (
-          <div className="sub">
-            {v.next
-              ? `次のフェーズ：${v.next.name}（${shortDate(v.next.startDate as string)}〜${shortDate(v.next.endDate)}）`
-              : '今日に当たるフェーズがありません。設定のフェーズ表に行を追加してください。'}
+          <div className="row between wrap">
+            <span className="sub">
+              {v.next
+                ? `次のフェーズ：${v.next.name}（${shortDate(v.next.startDate as string)}〜${shortDate(v.next.endDate)}）`
+                : '今日に当たるフェーズがありません。'}
+            </span>
+            {!v.next && (
+              <button type="button" className="btn small" onClick={() => navigate('plan')}>
+                計画を立てる
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {(!v.weighedToday || !v.waistThisWeek) && (
+        <div className="card">
+          <h2>まだ記録していないもの</h2>
+          <div className="row wrap">
+            {!v.weighedToday && (
+              <button type="button" className="btn small" onClick={() => navigate('record', 'weight')}>
+                今日の体重
+              </button>
+            )}
+            {!v.waistThisWeek && (
+              <button type="button" className="btn small" onClick={() => navigate('record', 'waist')}>
+                今週のウエスト
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {data.formula.fallbackReason && (
         <div className="card" role="alert">
@@ -189,7 +215,7 @@ export function Home({ data }: { data: Data }) {
 
       <div className="card">
         <div className="sub">
-          直近のトータルe1RM{strength ? `（${shortDate(strength.weekStart)}の週）` : ''}・{data.formula.formula.name}
+          直近の推定トータル{strength ? `（${shortDate(strength.weekStart)}の週）` : ''}・{data.formula.formula.name}
         </div>
         <div className="stats" style={{ marginTop: 6 }}>
           <div className="stat">
@@ -209,13 +235,6 @@ export function Home({ data }: { data: Data }) {
         </div>
         {!strength && <div className="muted">SQ・BP・DL が直近2週以内に揃うと表示されます。</div>}
       </div>
-
-      {(!v.weighedToday || !v.waistThisWeek) && (
-        <div className="card sub">
-          {!v.weighedToday && <div>・今日の体重が未入力</div>}
-          {!v.waistThisWeek && <div>・今週のウエストが未入力</div>}
-        </div>
-      )}
 
       <SyncLine />
     </>

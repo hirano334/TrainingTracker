@@ -122,7 +122,7 @@ export function Report({ data, cycleId, close }: { data: Data; cycleId: string; 
           </tbody>
         </table>
         <div className="muted" style={{ marginTop: 6 }}>
-          トータルe1RM は直近2週の週ごとの最大値の平均。試合基準で挙げていないセットは含まない。
+          推定トータルは直近2週の週ごとの最大値の平均。試合基準で挙げていないセットは含まない。
         </div>
       </div>
 

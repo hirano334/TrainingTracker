@@ -590,3 +590,56 @@ html.printing .report > .page-head {
     overflow: hidden;
   }
 }
+
+/* 設定の一覧 */
+.menu {
+  padding: 0;
+}
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 14px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: none;
+  text-align: left;
+}
+.menu button:first-child {
+  border-top: 0;
+}
+.menu .chev {
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+}
+.back {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 15px;
+  padding: 6px 0;
+}
+/* 計画の段の番号 */
+.step {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 13px;
+  vertical-align: 1px;
+}
+.start-here {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--fill);
+  font-size: 14px;
+  font-weight: 600;
+}
